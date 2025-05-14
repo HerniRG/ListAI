@@ -5,7 +5,7 @@ import Combine
 
 final class ProductRepositoryImpl: ProductRepositoryProtocol {
     
-    private let db = Firestore.firestore()
+    private lazy var db = Firestore.firestore()
     
     func getProducts(userID: String, listID: String) -> AnyPublisher<[ProductModel], Error> {
         let path = "users/\(userID)/lists/\(listID)/products"
@@ -29,7 +29,7 @@ final class ProductRepositoryImpl: ProductRepositoryProtocol {
         let path = "users/\(userID)/lists/\(listID)/products"
         return Future { promise in
             do {
-                try db.collection(path).document(product.id ?? UUID().uuidString).setData(from: product) { error in
+                try self.db.collection(path).document(product.id ?? UUID().uuidString).setData(from: product) { error in
                     if let error = error {
                         promise(.failure(error))
                     } else {
@@ -51,7 +51,7 @@ final class ProductRepositoryImpl: ProductRepositoryProtocol {
         }
         return Future { promise in
             do {
-                try db.collection(path).document(id).setData(from: product) { error in
+                try self.db.collection(path).document(id).setData(from: product) { error in
                     if let error = error {
                         promise(.failure(error))
                     } else {

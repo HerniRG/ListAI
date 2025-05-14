@@ -4,7 +4,7 @@ import FirebaseFirestore
 
 final class ListRepositoryImpl: ListRepositoryProtocol {
     
-    private let db = Firestore.firestore()
+    private lazy var db = Firestore.firestore()
     
     func getAllLists(userID: String) -> AnyPublisher<[ShoppingListModel], Error> {
         let path = "users/\(userID)/lists"

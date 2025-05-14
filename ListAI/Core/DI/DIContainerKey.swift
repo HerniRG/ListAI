@@ -1,9 +1,8 @@
 import SwiftUI
 
 private struct DIContainerKey: EnvironmentKey {
-    static let defaultValue: DIContainer = {
-        fatalError("DIContainer has not been set.")
-    }()
+    // Provide a safe default implementation instead of fatalError
+    static let defaultValue: DIContainer = .defaultValue
 }
 
 extension EnvironmentValues {

@@ -10,6 +10,8 @@ struct RootView: View {
                 HomeView()
                     .environmentObject(HomeViewModel(
                         listUseCase: di.listUseCase,
+                        productUseCase: di.productUseCase,
+                        iaUseCase: di.iaUseCase,
                         session: session
                     ))
             } else {

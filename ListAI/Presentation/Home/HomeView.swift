@@ -4,6 +4,9 @@ struct HomeView: View {
     @EnvironmentObject var session: SessionManager
     @EnvironmentObject var viewModel: HomeViewModel
     
+    @State private var ingredientesSugeridos: [String] = []
+    @State private var showIngredientSheet = false
+
     var body: some View {
         NavigationView {
             VStack(alignment: .leading, spacing: 16) {
@@ -26,12 +29,61 @@ struct HomeView: View {
                             }
                         }
                     }
+
+                    HStack {
+                        TextField("Añadir producto o plato", text: $viewModel.newProductName)
+                            .textFieldStyle(RoundedBorderTextFieldStyle())
+
+                        Button("Usar IA") {
+                            let dish = viewModel.newProductName.trimmingCharacters(in: .whitespaces)
+                            viewModel.fetchIngredients(for: dish) { ingredientes in
+                                self.ingredientesSugeridos = ingredientes
+                                self.showIngredientSheet = true
+                            }
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Button("Añadir") {
+                        viewModel.addProductManually()
+                    }
+                    .buttonStyle(.borderedProminent)
                 } else {
-                    Text("No tienes listas creadas todavía.")
+                    VStack(spacing: 16) {
+                        Text("No tienes listas creadas todavía.")
+                            .font(.headline)
+
+                        TextField("Nombre de nueva lista", text: $viewModel.newListName)
+                            .textFieldStyle(.roundedBorder)
+
+                        Button("Crear lista") {
+                            viewModel.createInitialList()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
                 }
             }
             .padding()
             .navigationTitle("ListAI")
+        }
+        .sheet(isPresented: $showIngredientSheet) {
+            NavigationView {
+                List {
+                    ForEach(ingredientesSugeridos, id: \.self) { ingrediente in
+                        HStack {
+                            Text(ingrediente)
+                            Spacer()
+                            Button(action: {
+                                viewModel.addIngredientManually(ingrediente, from: viewModel.newProductName)
+                            }) {
+                                Image(systemName: "plus.circle.fill")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
+                }
+                .navigationTitle("Ingredientes sugeridos")
+            }
         }
     }
 }
