@@ -116,20 +116,14 @@ final class HomeViewModel: ObservableObject {
                   )
               }
 
-              let group = DispatchGroup()
-
               newProducts.forEach { product in
-                  group.enter()
                   self?.productUseCase.addProduct(userID: userID, listID: listID, product: product)
-                      .sink(receiveCompletion: { _ in group.leave() },
-                            receiveValue: { })
+                      .sink(receiveCompletion: { _ in }, receiveValue: { })
                       .store(in: &self!.cancellables)
               }
 
-              group.notify(queue: .main) {
-                  self?.products.append(contentsOf: newProducts)
-                  self?.newProductName = ""
-              }
+              self?.products.append(contentsOf: newProducts)
+              self?.newProductName = ""
           }
           .store(in: &cancellables)
     }

@@ -1,12 +1,17 @@
 import Foundation
 
 struct APIKeys {
-    static var openRouterKey: String {
+    private static let _openRouterKey: String = {
         guard let filePath = Bundle.main.path(forResource: "Secrets", ofType: "plist"),
               let plist = NSDictionary(contentsOfFile: filePath),
-              let value = plist["OPENROUTER_API_KEY"] as? String else {
-            fatalError("API Key not found")
+              let value = plist["OPENROUTER_API_KEY"] as? String?
+        else {
+            fatalError("OPENROUTER_API_KEY no encontrada en Secrets.plist")
         }
-        return value
-    }
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        assert(!trimmed.isEmpty, "OPENROUTER_API_KEY está vacía")
+        return trimmed
+    }()
+
+    static var openRouterKey: String { _openRouterKey }
 }

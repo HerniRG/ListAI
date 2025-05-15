@@ -37,10 +37,13 @@ struct HomeView: View {
                         Button("Usar IA") {
                             let dish = viewModel.newProductName.trimmingCharacters(in: .whitespaces)
                             viewModel.fetchIngredients(for: dish) { ingredientes in
-                                self.ingredientesSugeridos = ingredientes
-                                self.showIngredientSheet = true
+                                withAnimation {
+                                    self.ingredientesSugeridos = ingredientes
+                                    self.showIngredientSheet = true
+                                }
                             }
                         }
+                        .disabled(viewModel.newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
                         .buttonStyle(.bordered)
                     }
 
@@ -65,8 +68,9 @@ struct HomeView: View {
             }
             .padding()
             .navigationTitle("ListAI")
+            .animation(.easeInOut, value: showIngredientSheet)
         }
-        .sheet(isPresented: $showIngredientSheet) {
+        .sheet(isPresented: $showIngredientSheet, content: {
             NavigationView {
                 List {
                     ForEach(ingredientesSugeridos, id: \.self) { ingrediente in
@@ -82,8 +86,10 @@ struct HomeView: View {
                         }
                     }
                 }
+                .animation(.easeInOut, value: ingredientesSugeridos)
                 .navigationTitle("Ingredientes sugeridos")
             }
-        }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        })
     }
 }
