@@ -3,7 +3,15 @@ import Combine
 
 final class HomeViewModel: ObservableObject {
     
-    @Published var activeList: ShoppingListModel?
+    @Published var activeList: ShoppingListModel? {
+        didSet {
+            guard
+                let listID = activeList?.id,
+                let userID = session.userID
+            else { return }
+            loadProducts(userID: userID, listID: listID)
+        }
+    }
     @Published var lists: [ShoppingListModel] = []
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
@@ -42,10 +50,7 @@ final class HomeViewModel: ObservableObject {
                 }
             } receiveValue: { [weak self] lists in
                 self?.lists = lists
-                self?.activeList = lists.first
-                if let listID = self?.activeList?.id, let userID = self?.session.userID {
-                    self?.loadProducts(userID: userID, listID: listID)
-                }
+                self?.activeList = lists.first      // didSet se encargará de cargar los productos
             }
             .store(in: &cancellables)
     }
@@ -87,6 +92,33 @@ final class HomeViewModel: ObservableObject {
             } receiveValue: { [weak self] in
                 self?.products.append(newProduct)
                 self?.newProductName = ""
+            }
+            .store(in: &cancellables)
+    }
+    
+    func addProduct(named name: String) {
+        guard let userID = session.userID,
+              let listID = activeList?.id,
+              !name.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return
+        }
+
+        let newProduct = ProductModel(
+            id: UUID().uuidString,
+            nombre: name.trimmingCharacters(in: .whitespaces),
+            esComprado: false,
+            añadidoPorIA: false,
+            ingredientesDe: nil
+        )
+
+        productUseCase.addProduct(userID: userID, listID: listID, product: newProduct)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            } receiveValue: { [weak self] in
+                self?.products.append(newProduct)
             }
             .store(in: &cancellables)
     }
@@ -248,6 +280,27 @@ final class HomeViewModel: ObservableObject {
             } receiveValue: { [weak self] newList in
                 self?.lists.append(newList)
                 self?.activeList = newList
+            }
+            .store(in: &cancellables)
+    }
+    
+    
+    func deleteCurrentList() {
+        guard let userID = session.userID,
+              let list = activeList else { return }
+        guard let listID = list.id else { return }
+
+        listUseCase.deleteList(for: userID, listID: listID)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            } receiveValue: { [weak self] in
+                self?.lists.removeAll { $0.id == list.id }
+                self?.products = []
+                self?.activeList = self?.lists.first
+                // If selection needs to be handled, do it in the View, not here.
             }
             .store(in: &cancellables)
     }
