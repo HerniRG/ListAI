@@ -1,6 +1,6 @@
 import FirebaseFirestore
 
-struct ProductModel: Identifiable, Codable {
+struct ProductModel: Identifiable, Codable, Equatable {
     @DocumentID var id: String? // autogestionado por Firestore
     var nombre: String
     var esComprado: Bool
