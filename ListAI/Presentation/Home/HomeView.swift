@@ -11,6 +11,8 @@ enum Haptic {
 struct HomeView: View {
     @EnvironmentObject var session: SessionManager
     @EnvironmentObject var viewModel: HomeViewModel
+    
+    @Namespace private var chipNamespace
 
     @State private var showAddProductSheet = false
     @State private var newProductName = ""
@@ -23,6 +25,8 @@ struct HomeView: View {
     @State private var fabRotation: Double = 0
     @State private var selectedProductID: String? = nil
     @State private var showDeleteListAlert = false
+    @State private var showDeleteProductAlert = false
+    @State private var isFetchingIngredients = false
 
     var body: some View {
         NavigationView {
@@ -37,33 +41,37 @@ struct HomeView: View {
                     // Lista de listas (selector tipo “pill”)
                     if !viewModel.lists.isEmpty {
                         ScrollView(.horizontal, showsIndicators: false) {
-                            HStack(spacing: 8) {
+                            HStack(spacing: 14) {
                                 Spacer().frame(width: 8) // Padding a la izquierda
                                 ForEach(viewModel.lists.indices, id: \.self) { idx in
                                     Button(action: {
                                         selectedPageIndex = idx
                                         Haptic.light()
-                                        withAnimation { viewModel.activeList = viewModel.lists[idx] }
+                                        withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
+                                            viewModel.activeList = viewModel.lists[idx]
+                                        }
                                     }) {
                                         Text(viewModel.lists[idx].nombre)
                                             .fontWeight(selectedPageIndex == idx ? .bold : .regular)
-                                            .scaleEffect(selectedPageIndex == idx ? 1.05 : 1.0)
-                                            .animation(.spring(response: 0.3, dampingFraction: 0.7), value: selectedPageIndex)
-                                            .padding(.horizontal, 16)
+                                            .foregroundColor(selectedPageIndex == idx ? .white : .accentColor)
+                                            .padding(.horizontal, 20)
                                             .padding(.vertical, 8)
                                             .lineLimit(1)
                                             .truncationMode(.tail)
                                             .background(
-                                                Capsule()
-                                                    .strokeBorder(selectedPageIndex == idx ? Color.accentColor : Color.gray.opacity(0.3), lineWidth: 2)
-                                                    .background(
+                                                Group {
+                                                    if selectedPageIndex == idx {
                                                         Capsule()
-                                                            .fill(selectedPageIndex == idx ? Color.accentColor.opacity(0.15) : Color.clear)
-                                                    )
-                                                    .shadow(color: selectedPageIndex == idx ? Color.accentColor.opacity(0.18) : .clear, radius: 7, x: 0, y: 3)
-                                            )
-                                            .foregroundColor(selectedPageIndex == idx ? .accentColor : .secondary)
-                                    }
+                                                            .fill(Color.accentColor)
+                                                            .matchedGeometryEffect(id: "chip", in: chipNamespace)
+                                                    } else {
+                                                        Capsule()
+                                                            .fill(Color.accentColor.opacity(0.12))
+                                                    }
+                                                }
+                                            )                                    }
+                                    .buttonStyle(.plain) // evita el resaltado azul de los botones por defecto
+                                    .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selectedPageIndex)
                                 }
                                 Button(action: { showNewListSheet = true }) {
                                     Image(systemName: "plus.circle.fill")
@@ -73,11 +81,8 @@ struct HomeView: View {
                                 Spacer().frame(width: 8) // Padding a la derecha
                             }
                         }
-                        .padding(.vertical, 10)
-                        .padding(.horizontal, 4)
-                        .background(.ultraThinMaterial)
-                        .cornerRadius(20)
-                        .padding(.bottom, 8)
+                        .padding(.vertical, 14)
+                        .padding(.horizontal, 8)
                     }
                     
                     // Estado: cargando, error, vacío
@@ -137,6 +142,22 @@ struct HomeView: View {
         } message: {
             Text("Esta acción eliminará la lista y todos sus productos.")
         }
+        .alert("¿Eliminar este producto?", isPresented: $showDeleteProductAlert) {
+            Button("Eliminar", role: .destructive) {
+                if let id = selectedProductID,
+                   let product = viewModel.products.first(where: { $0.id == id }) {
+                    withAnimation(.easeInOut) {
+                        viewModel.deleteProduct(product)
+                    }
+                }
+                selectedProductID = nil
+            }
+            Button("Cancelar", role: .cancel) {
+                selectedProductID = nil
+            }
+        } message: {
+            Text("Esta acción eliminará el producto de tu lista.")
+        }
     }
 
     // MARK: - Header
@@ -151,6 +172,7 @@ struct HomeView: View {
             Spacer()
             ProfileIconView() // Crea un pequeño componente para el avatar/perfil
         }
+        .padding(.bottom, 12)
     }
 
     // MARK: - Lista de productos con tarjetas y swipe actions NATIVOS
@@ -164,7 +186,7 @@ struct HomeView: View {
                 Text("Productos: \(viewModel.products.count)")
                     .font(.caption)
                     .foregroundColor(.secondary)
-
+                
                 Menu {
                     Button(role: .destructive) {
                         showDeleteListAlert = true
@@ -180,88 +202,94 @@ struct HomeView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
-
-            if viewModel.products.isEmpty {
-                Spacer()
-                VStack(spacing: 16) {
-                    Image(systemName: "cart")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 70, height: 70)
-                        .foregroundColor(.accentColor.opacity(0.3))
-                    Text("Tu lista está vacía").font(.headline)
-                }
-                Spacer()
-            } else {
-                List {
-                    ForEach(viewModel.products) { product in
-                        HStack(spacing: 16) {
-                            Button(action: {
-                                withAnimation(.spring()) {
-                                    viewModel.toggleComprado(for: product)
+            
+            Group {
+                if viewModel.products.isEmpty {
+                    Spacer()
+                    VStack(spacing: 16) {
+                        Image(systemName: "cart")
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: 70, height: 70)
+                            .foregroundColor(.accentColor.opacity(0.3))
+                        Text("Tu lista está vacía").font(.headline)
+                    }
+                    .transition(.opacity.combined(with: .scale))
+                    Spacer()
+                } else {
+                    List {
+                        ForEach(viewModel.products) { product in
+                            HStack(spacing: 16) {
+                                Button(action: {
+                                    withAnimation(.spring()) {
+                                        viewModel.toggleComprado(for: product)
+                                    }
+                                    Haptic.light()
+                                }) {
+                                    Image(systemName: product.esComprado ? "checkmark.circle.fill" : "circle")
+                                        .font(.title2)
+                                        .foregroundColor(product.esComprado ? .green : .gray.opacity(0.6))
+                                        .scaleEffect(product.esComprado ? 1.1 : 1)
                                 }
-                                Haptic.light()
-                            }) {
-                                Image(systemName: product.esComprado ? "checkmark.circle.fill" : "circle")
-                                    .font(.title2)
-                                    .foregroundColor(product.esComprado ? .green : .gray.opacity(0.6))
-                                    .scaleEffect(product.esComprado ? 1.1 : 1)
+                                .buttonStyle(.plain)
+                                
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(product.nombre)
+                                        .font(.body)
+                                        .strikethrough(product.esComprado, color: .gray)
+                                        .foregroundColor(product.esComprado ? .gray : .primary)
+                                        .animation(.easeInOut, value: product.esComprado)
+                                }
+                                Spacer()
                             }
-                            .buttonStyle(.plain)
-
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(product.nombre)
-                                    .font(.body)
-                                    .strikethrough(product.esComprado, color: .gray)
-                                    .foregroundColor(product.esComprado ? .gray : .primary)
-                                    .animation(.easeInOut, value: product.esComprado)
+                            .padding(.vertical, 10)
+                            .listRowSeparator(.hidden)
+                            .background(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .fill(Color.clear)
+                            )
+                            .onTapGesture {
+                                withAnimation(.easeInOut(duration: 0.12)) {
+                                    selectedProductID = product.id
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
+                                    withAnimation { selectedProductID = nil }
+                                }
                             }
-                            Spacer()
+                            .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                Button(role: .destructive) {
+                                    selectedProductID = product.id
+                                    showDeleteProductAlert = true
+                                } label: {
+                                    Label("Eliminar", systemImage: "trash")
+                                }
+                                Button {
+                                    editedName = product.nombre
+                                    viewModel.editingProduct = product
+                                } label: {
+                                    Label("Editar", systemImage: "pencil")
+                                }
+                                .tint(.blue)
+                            }
+                            .transition(.asymmetric(
+                                insertion: .scale.combined(with: .opacity),
+                                removal: .scale(scale: 0.9).combined(with: .opacity)
+                            ))
                         }
-                        .padding(.vertical, 10)
-                        .listRowSeparator(.hidden)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(selectedProductID == product.id ? Color.accentColor.opacity(0.08) : Color.clear)
-                        )
-                        .onTapGesture {
-                            withAnimation(.easeInOut(duration: 0.12)) {
-                                selectedProductID = product.id
-                            }
-                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
-                                withAnimation { selectedProductID = nil }
-                            }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            Button(role: .destructive) {
+                        .onDelete { indices in
+                            indices.map { viewModel.products[$0] }.forEach { product in
                                 withAnimation { viewModel.deleteProduct(product) }
-                            } label: {
-                                Label("Eliminar", systemImage: "trash")
                             }
-                            Button {
-                                editedName = product.nombre
-                                viewModel.editingProduct = product
-                            } label: {
-                                Label("Editar", systemImage: "pencil")
-                            }
-                            .tint(.blue)
-                        }
-                        .transition(.asymmetric(
-                            insertion: .scale.combined(with: .opacity),
-                            removal: .scale(scale: 0.9).combined(with: .opacity)
-                        ))
-                    }
-                    .onDelete { indices in
-                        indices.map { viewModel.products[$0] }.forEach { product in
-                            withAnimation { viewModel.deleteProduct(product) }
                         }
                     }
+                    .listStyle(.plain)
+                    .padding(.top, 8)
+                    .padding(.bottom, 4)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.75), value: viewModel.products)
+                    .transition(.opacity.combined(with: .move(edge: .trailing)))
                 }
-                .listStyle(.plain)
-                .padding(.top, 8)
-                .padding(.bottom, 4)
-                .animation(.spring(response: 0.4, dampingFraction: 0.75), value: viewModel.products)
             }
+            .animation(.easeInOut(duration: 0.35), value: viewModel.products)
         }
         .padding(.horizontal, 2)
         .frame(maxHeight: .infinity)
@@ -332,69 +360,89 @@ struct HomeView: View {
             addProductSheet
         }
     }
-    // MARK: - Sheet para añadir producto
+    // MARK: - Sheet para añadir producto (nuevo diseño profesional)
     private var addProductSheet: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 24) {
+            // Cabecera
             Text("Añadir producto o plato")
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
-            HStack(spacing: 16) {
+                .padding(.top, 8)
+
+            // Campo de texto con icono
+            HStack(spacing: 12) {
                 Image(systemName: "tag")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 28, height: 28)
                     .foregroundColor(.accentColor)
                 TextField("Nombre del producto o plato", text: $newProductName)
-                    .font(.title3)
+                    .font(.body)
+                    .textInputAutocapitalization(.sentences)
             }
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .frame(maxWidth: .infinity)
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(12)
 
-            HStack(spacing: 16) {
+            // Botones alineados
+            HStack(spacing: 12) {
                 Button {
-                    viewModel.addProduct(named: newProductName)
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                        viewModel.addProduct(named: newProductName)
+                    }
                     newProductName = ""
                     showAddProductSheet = false
                 } label: {
-                    Label("Añadir manualmente", systemImage: "plus")
-                        .frame(maxWidth: .infinity)
+                    Label("Añadir", systemImage: "plus")
+                        .frame(maxWidth: .infinity, minHeight: 48)
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
 
                 Button {
+                    isFetchingIngredients = true
                     viewModel.fetchIngredients(for: newProductName) { ingredientes in
+                        self.ingredientesSugeridos = ingredientes
+                        isFetchingIngredients = false
                         withAnimation {
-                            self.ingredientesSugeridos = ingredientes
                             self.showIngredientSheet = true
                             self.showAddProductSheet = false
                         }
                     }
                 } label: {
-                    Label("Usar IA", systemImage: "wand.and.stars")
-                        .frame(maxWidth: .infinity)
+                    if isFetchingIngredients {
+                        HStack {
+                            ProgressView()
+                            Text("Pensando…")
+                        }
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                    } else {
+                        Label("Usar IA", systemImage: "brain.head.profile")
+                            .frame(maxWidth: .infinity, minHeight: 48)
+                    }
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.gray)
-                .disabled(newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
+                .tint(.indigo)
+                .disabled(isFetchingIngredients || newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
-            .frame(maxWidth: .infinity)
 
-            Button("Cancelar", role: .cancel) {
+            // Texto explicativo IA
+            Text("La IA sugiere ingredientes en base al nombre del plato.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            // Botón cancelar
+            Button("Cancelar", role: .destructive) {
                 showAddProductSheet = false
                 newProductName = ""
             }
-            .frame(maxWidth: .infinity)
+            .frame(maxWidth: .infinity, minHeight: 44)
             .buttonStyle(.bordered)
-            .padding(.top, 4)
+            .tint(.red)
+            .controlSize(.regular)
+            .padding(.top, 8)
         }
-        .padding(.horizontal, 28)
+        .padding(.horizontal, 24)
         .padding(.vertical, 32)
-        .frame(maxWidth: 480)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }
@@ -414,50 +462,59 @@ struct HomeView: View {
         .padding(.top, 60)
     }
 
-    // MARK: - Sheet nueva lista
+    // MARK: - Sheet nueva lista (nuevo diseño profesional y homogéneo)
     private var newListSheet: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 24) {
+            // Cabecera solo texto, sin icono grande
             Text("Crear nueva lista")
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
-            HStack(spacing: 16) {
+                .padding(.top, 8)
+
+            // Campo con icono
+            HStack(spacing: 12) {
                 Image(systemName: "list.bullet.rectangle")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 28, height: 28)
                     .foregroundColor(.accentColor)
                 TextField("Nombre de la lista", text: $newListName)
-                    .font(.title3)
+                    .font(.body)
+                    .textInputAutocapitalization(.sentences)
             }
-            .padding(18)
-            .background(
-                RoundedRectangle(cornerRadius: 14)
-                    .fill(Color(.secondarySystemBackground))
-            )
-            .frame(maxWidth: .infinity)
-            HStack(spacing: 16) {
-                Button {
-                    viewModel.addNewList(nombre: newListName)
-                    newListName = ""
-                    showNewListSheet = false
-                } label: {
-                    Label("Crear lista", systemImage: "plus")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(newListName.trimmingCharacters(in: .whitespaces).isEmpty)
-                Button("Cancelar", role: .cancel) {
-                    showNewListSheet = false
-                    newListName = ""
-                }
-                .frame(maxWidth: .infinity)
-                .buttonStyle(.bordered)
+            .padding()
+            .background(Color(.secondarySystemBackground))
+            .cornerRadius(12)
+
+            // Botón principal (todo el ancho)
+            Button {
+                viewModel.addNewList(nombre: newListName)
+                newListName = ""
+                showNewListSheet = false
+            } label: {
+                Label("Crear lista", systemImage: "plus")
+                    .frame(maxWidth: .infinity, minHeight: 48)
             }
-            .frame(maxWidth: .infinity)
+            .buttonStyle(.borderedProminent)
+            .disabled(newListName.trimmingCharacters(in: .whitespaces).isEmpty)
+
+            // Explicación breve
+            Text("Puedes crear listas para organizar diferentes tipos de compras.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+
+            // Botón cancelar, igual ancho y separado
+            Button("Cancelar", role: .destructive) {
+                showNewListSheet = false
+                newListName = ""
+            }
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .buttonStyle(.bordered)
+            .tint(.red)
+            .controlSize(.regular)
+            .padding(.top, 8)
         }
-        .padding(.horizontal, 28)
+        .padding(.horizontal, 24)
         .padding(.vertical, 32)
-        .frame(maxWidth: 480)
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
     }
@@ -465,45 +522,52 @@ struct HomeView: View {
     // MARK: - Sheet ingredientes sugeridos
     private var ingredientSheet: some View {
         NavigationView {
-            VStack(spacing: 18) {
-                // Cabecera con icono
-                HStack(spacing: 14) {
+            VStack(spacing: 0) {
+                // Cabecera visual
+                VStack(spacing: 6) {
                     Image(systemName: "wand.and.stars")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 32, height: 32)
+                        .font(.system(size: 34, weight: .medium))
                         .foregroundColor(.accentColor)
                     Text("Ingredientes sugeridos")
-                        .font(.title2.weight(.bold))
+                        .font(.title2.bold())
                         .foregroundColor(.primary)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 16)
+                .padding(.top, 18)
+                .padding(.bottom, 8)
+                // Lista agrupada
                 List {
                     ForEach(ingredientesSugeridos, id: \.self) { ingrediente in
-                        Button(action: {
-                            viewModel.addIngredientManually(ingrediente, from: viewModel.newProductName)
-                        }) {
-                            HStack {
-                                Text(ingrediente)
-                                    .font(.body)
-                                Spacer()
+                        HStack {
+                            Text(ingrediente)
+                                .font(.body)
+                            Spacer()
+                            Button {
+                                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                                    viewModel.addIngredientManually(ingrediente, from: viewModel.newProductName)
+                                }
+                            } label: {
                                 Image(systemName: "plus.circle.fill")
-                                    .font(.title2)
+                                    .font(.system(size: 26, weight: .medium))
                                     .foregroundColor(.accentColor)
                             }
-                            .padding(.vertical, 8)
-                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .buttonStyle(.plain)
+                            .frame(width: 44, height: 44)
+                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Color.accentColor.opacity(0.13))
-                        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+                        .padding(.vertical, 4)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            RoundedRectangle(cornerRadius: 12)
+                                .fill(Color(.secondarySystemBackground))
+                        )
                     }
                 }
                 .listStyle(.insetGrouped)
                 .padding(.top, 8)
                 .animation(.easeInOut, value: ingredientesSugeridos)
             }
+            .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cerrar") { showIngredientSheet = false }
@@ -517,46 +581,53 @@ struct HomeView: View {
 
     // MARK: - Sheet editar producto
     private var editSheet: some View {
-        VStack(spacing: 32) {
+        VStack(spacing: 24) {
             if let product = viewModel.editingProduct {
+                // Cabecera solo texto
                 Text("Editar producto")
                     .font(.title2.bold())
                     .multilineTextAlignment(.center)
-                HStack(spacing: 16) {
-                    Image(systemName: "pencil")
-                        .resizable()
-                        .scaledToFit()
-                        .frame(width: 28, height: 28)
+                    .padding(.top, 8)
+                // Campo de texto con icono
+                HStack(spacing: 12) {
+                    Image(systemName: "tag")
                         .foregroundColor(.accentColor)
                     TextField("Nombre del producto", text: $editedName)
-                        .font(.title3)
+                        .font(.body)
                 }
-                .padding(18)
-                .background(
-                    RoundedRectangle(cornerRadius: 14)
-                        .fill(Color(.secondarySystemBackground))
-                )
-                .frame(maxWidth: .infinity)
-                HStack(spacing: 16) {
-                    Button("Guardar") {
-                        var updated = product
-                        updated.nombre = editedName
-                        viewModel.editProduct(updated)
-                        viewModel.editingProduct = nil
-                    }
-                    .frame(maxWidth: .infinity)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(editedName.trimmingCharacters(in: .whitespaces).isEmpty)
-                    Button("Cancelar", role: .cancel) {
-                        viewModel.editingProduct = nil
-                    }
-                    .frame(maxWidth: .infinity)
-                    .buttonStyle(.bordered)
+                .padding()
+                .background(Color(.secondarySystemBackground))
+                .cornerRadius(12)
+                // Botón principal (todo el ancho)
+                Button {
+                    var updated = product
+                    updated.nombre = editedName
+                    viewModel.editProduct(updated)
+                    viewModel.editingProduct = nil
+                } label: {
+                    Label("Guardar cambios", systemImage: "checkmark")
+                        .frame(maxWidth: .infinity, minHeight: 48)
                 }
-                .frame(maxWidth: .infinity)
+                .buttonStyle(.borderedProminent)
+                .disabled(editedName.trimmingCharacters(in: .whitespaces).isEmpty)
+                // Explicación breve
+                Text("Modifica el nombre del producto y guarda los cambios.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal)
+                // Botón cancelar (todo el ancho, rojo)
+                Button("Cancelar", role: .destructive) {
+                    viewModel.editingProduct = nil
+                }
+                .frame(maxWidth: .infinity, minHeight: 44)
+                .buttonStyle(.bordered)
+                .tint(.red)
+                .controlSize(.regular)
+                .padding(.top, 8)
             }
         }
-        .padding(.horizontal, 28)
+        .padding(.horizontal, 24)
         .padding(.vertical, 32)
         .frame(maxWidth: 480)
         .presentationDetents([.medium])
