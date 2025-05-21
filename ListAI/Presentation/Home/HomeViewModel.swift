@@ -63,7 +63,7 @@ final class HomeViewModel: ObservableObject {
                     self?.errorMessage = error.localizedDescription
                 }
             } receiveValue: { [weak self] products in
-                self?.products = products
+                self?.products = products.sorted(by: { ($0.orden ?? 0) < ($1.orden ?? 0) })
             }
             .store(in: &cancellables)
     }
@@ -303,5 +303,22 @@ final class HomeViewModel: ObservableObject {
                 // If selection needs to be handled, do it in the View, not here.
             }
             .store(in: &cancellables)
+    }
+    
+    func moveProducts(from source: IndexSet, to destination: Int) {
+        _ = source.map { products[$0] }
+        products.move(fromOffsets: source, toOffset: destination)
+
+        guard let userID = session.userID, let listID = activeList?.id else { return }
+
+        // Guardar nuevo orden en Firebase
+        for (index, product) in products.enumerated() {
+            var updatedProduct = product
+            updatedProduct.orden = index
+
+            productUseCase.updateProduct(userID: userID, listID: listID, product: updatedProduct)
+                .sink(receiveCompletion: { _ in }, receiveValue: { })
+                .store(in: &cancellables)
+        }
     }
 }

@@ -82,7 +82,7 @@ struct HomeView: View {
                             }
                         }
                         .padding(.vertical, 14)
-                        .padding(.horizontal, 8)
+                        //.padding(.horizontal, 8)
                     }
                     
                     // Estado: cargando, error, vacío
@@ -239,6 +239,10 @@ struct HomeView: View {
                                         .strikethrough(product.esComprado, color: .gray)
                                         .foregroundColor(product.esComprado ? .gray : .primary)
                                         .animation(.easeInOut, value: product.esComprado)
+                                        .onTapGesture(count: 2) {
+                                            editedName = product.nombre
+                                            viewModel.editingProduct = product
+                                        }
                                 }
                                 Spacer()
                             }
@@ -276,6 +280,9 @@ struct HomeView: View {
                                 removal: .scale(scale: 0.9).combined(with: .opacity)
                             ))
                         }
+                        .onMove { indices, newOffset in
+                            viewModel.moveProducts(from: indices, to: newOffset)
+                        }
                         .onDelete { indices in
                             indices.map { viewModel.products[$0] }.forEach { product in
                                 withAnimation { viewModel.deleteProduct(product) }
@@ -287,6 +294,7 @@ struct HomeView: View {
                     .padding(.bottom, 4)
                     .animation(.spring(response: 0.4, dampingFraction: 0.75), value: viewModel.products)
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
+                    .environment(\.editMode, .constant(.active))
                 }
             }
             .animation(.easeInOut(duration: 0.35), value: viewModel.products)
@@ -355,7 +363,7 @@ struct HomeView: View {
                     .animation(.spring(response: 0.3, dampingFraction: 0.5), value: fabRotation)
             }
         }
-        .accessibilityLabel("Añadir producto o plato")
+        .accessibilityLabel("Añadir elemento")
         .sheet(isPresented: $showAddProductSheet) {
             addProductSheet
         }
@@ -364,7 +372,7 @@ struct HomeView: View {
     private var addProductSheet: some View {
         VStack(spacing: 24) {
             // Cabecera
-            Text("Añadir producto o plato")
+            Text("Añadir elemento a la lista")
                 .font(.title2.bold())
                 .multilineTextAlignment(.center)
                 .padding(.top, 8)
@@ -373,7 +381,7 @@ struct HomeView: View {
             HStack(spacing: 12) {
                 Image(systemName: "tag")
                     .foregroundColor(.accentColor)
-                TextField("Nombre del producto o plato", text: $newProductName)
+                TextField("Nombre del elemento", text: $newProductName)
                     .font(.body)
                     .textInputAutocapitalization(.sentences)
             }
@@ -414,7 +422,7 @@ struct HomeView: View {
                         }
                         .frame(maxWidth: .infinity, minHeight: 48)
                     } else {
-                        Label("Usar IA", systemImage: "brain.head.profile")
+                        Label("Sugerencias IA", systemImage: "sparkles")
                             .frame(maxWidth: .infinity, minHeight: 48)
                     }
                 }
@@ -424,7 +432,7 @@ struct HomeView: View {
             }
 
             // Texto explicativo IA
-            Text("La IA sugiere ingredientes en base al nombre del plato.")
+            Text("La IA sugiere elementos según lo que escribas: platos, viajes, fiestas o cualquier otra idea.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -522,51 +530,56 @@ struct HomeView: View {
     // MARK: - Sheet ingredientes sugeridos
     private var ingredientSheet: some View {
         NavigationView {
-            VStack(spacing: 0) {
-                // Cabecera visual
+            VStack(spacing: 12) {
+                Spacer().frame(height: 8)
                 VStack(spacing: 6) {
-                    Image(systemName: "wand.and.stars")
+                    Image(systemName: "sparkles")
                         .font(.system(size: 34, weight: .medium))
                         .foregroundColor(.accentColor)
-                    Text("Ingredientes sugeridos")
+                    Text("Elementos sugeridos")
                         .font(.title2.bold())
                         .foregroundColor(.primary)
+                    Text("Basado en lo que escribiste")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
                 }
                 .frame(maxWidth: .infinity)
-                .padding(.top, 18)
-                .padding(.bottom, 8)
-                // Lista agrupada
+                // Lista limpia, sin separadores, animada
                 List {
                     ForEach(ingredientesSugeridos, id: \.self) { ingrediente in
-                        HStack {
-                            Text(ingrediente)
-                                .font(.body)
-                            Spacer()
-                            Button {
-                                withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                                    viewModel.addIngredientManually(ingrediente, from: viewModel.newProductName)
+                        if !ingrediente.isEmpty {
+                            HStack {
+                                Text(ingrediente)
+                                    .font(.body)
+                                Spacer()
+                                Button {
+                                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                                        viewModel.addIngredientManually(ingrediente, from: viewModel.newProductName)
+                                        if let index = ingredientesSugeridos.firstIndex(of: ingrediente) {
+                                            ingredientesSugeridos.remove(at: index)
+                                        }
+                                        Haptic.light()
+                                    }
+                                } label: {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .font(.system(size: 26, weight: .medium))
+                                        .foregroundColor(.green)
                                 }
-                            } label: {
-                                Image(systemName: "plus.circle.fill")
-                                    .font(.system(size: 26, weight: .medium))
-                                    .foregroundColor(.accentColor)
+                                .buttonStyle(.plain)
+                                .frame(width: 44, height: 44)
+                                .contentShape(Rectangle())
                             }
-                            .buttonStyle(.plain)
-                            .frame(width: 44, height: 44)
-                            .contentShape(Rectangle())
+                            .padding(.vertical, 4)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .listRowSeparator(.hidden)
                         }
-                        .padding(.vertical, 4)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 12)
-                                .fill(Color(.secondarySystemBackground))
-                        )
                     }
                 }
-                .listStyle(.insetGrouped)
-                .padding(.top, 8)
-                .animation(.easeInOut, value: ingredientesSugeridos)
+                .listStyle(.plain)
+                .animation(.easeInOut(duration: 0.3), value: ingredientesSugeridos)
             }
+            .padding(.top, 0)
             .background(Color(.systemGroupedBackground).ignoresSafeArea())
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -575,7 +588,7 @@ struct HomeView: View {
             }
         }
         .transition(.move(edge: .bottom).combined(with: .opacity))
-        .presentationDetents([.medium, .large])
+        .presentationDetents([.large])
         .presentationDragIndicator(.visible)
     }
 
@@ -584,7 +597,7 @@ struct HomeView: View {
         VStack(spacing: 24) {
             if let product = viewModel.editingProduct {
                 // Cabecera solo texto
-                Text("Editar producto")
+                Text("Editar elemento")
                     .font(.title2.bold())
                     .multilineTextAlignment(.center)
                     .padding(.top, 8)
@@ -592,7 +605,7 @@ struct HomeView: View {
                 HStack(spacing: 12) {
                     Image(systemName: "tag")
                         .foregroundColor(.accentColor)
-                    TextField("Nombre del producto", text: $editedName)
+                    TextField("Nombre del elemento", text: $editedName)
                         .font(.body)
                 }
                 .padding()

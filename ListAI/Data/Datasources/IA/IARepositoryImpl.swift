@@ -7,7 +7,7 @@ final class IARepositoryImpl: IARepositoryProtocol {
         let model: String
         let messages: [Message]
         let temperature: Double
-
+        
         struct Message: Encodable {
             let role: String
             let content: String
@@ -20,33 +20,49 @@ final class IARepositoryImpl: IARepositoryProtocol {
         request.httpMethod = "POST"
         request.setValue("Bearer \(APIKeys.openRouterKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
-
+        
         // Mensajes para OpenRouter
         let systemMessage = OpenRouterRequest.Message(
             role: "system",
-            content: "Eres un chef profesional. Responde únicamente con los ingredientes estrictamente necesarios, uno por línea, sin cantidades ni explicaciones adicionales."
+            content: """
+Eres LISTAI, un asistente experto en generar listas breves y prácticas. Analiza el texto del usuario y decide UNA (y solo una) de las siguientes categorías:
+
+1. **RECETA** ▸ El usuario menciona un plato o preparación de comida/bebida.
+2. **EVENTO / PROYECTO** ▸ El usuario menciona organizar, preparar o planificar algo (fiesta, viaje, mudanza, estudio, bebé…).
+3. **COMPRA ESPECÍFICA** ▸ El usuario menciona un solo objeto o producto concreto.
+
+Responde cumpliendo estas reglas estrictas:
+
+- Devuelve **solo los ítems** apropiados para la categoría elegida, **uno por línea**.
+- **Nunca mezcles categorías**.  
+  - Si es *RECETA* → ingredientes genéricos (sin cantidades, marcas ni guiones).  
+  - Si es *EVENTO/PROYECTO* → objetos o tareas necesarias (sin ingredientes ni recetas).  
+  - Si es *COMPRA ESPECÍFICA* → partes/componentes/variantes necesarias.
+- **No añadas numeración, guiones, puntos, viñetas, emojis, ni ningún símbolo antes de los ítems.**
+- Máximo 15 líneas. Si haces menos es perfecto.
+"""
         )
-        
-        let userPrompt = "Indica los ingredientes necesarios para preparar \(dish). Solo nombres de ingredientes, uno por línea."
+
+        let userPrompt = dish
         
         let messages = [
             systemMessage,
             OpenRouterRequest.Message(role: "user", content: userPrompt)
         ]
         let body = OpenRouterRequest(model: "mistralai/mistral-7b-instruct:free", messages: messages, temperature: 0.7)
-
+        
         do {
             request.httpBody = try JSONEncoder().encode(body)
-            #if DEBUG
+#if DEBUG
             debugPrint("📤 Cabeceras que se envían:", request.allHTTPHeaderFields ?? [:])
             if let data = request.httpBody, let json = String(data: data, encoding: .utf8) {
                 debugPrint("📤 Cuerpo:", json)
             }
-            #endif
+#endif
         } catch {
             return Fail(error: error).eraseToAnyPublisher()
         }
-
+        
         return URLSession.shared.dataTaskPublisher(for: request)
             .tryMap { data, response in
                 if let httpResponse = response as? HTTPURLResponse {
@@ -55,10 +71,10 @@ final class IARepositoryImpl: IARepositoryProtocol {
                 if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
                     throw URLError(.badServerResponse)
                 }
-
+                
                 let text = String(data: data, encoding: .utf8) ?? "<sin decodificar>"
                 print("🧾 Respuesta cruda de OpenRouter:\n\(text)")
-
+                
                 let result = try JSONDecoder().decode(OpenRouterResponse.self, from: data)
                 let rawText = result.choices.first?.message.content ?? ""
                 let ingredientesLimpios: [String] = rawText
