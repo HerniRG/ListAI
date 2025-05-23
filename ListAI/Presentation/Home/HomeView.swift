@@ -43,19 +43,9 @@ struct HomeView: View {
                             Text("❌ \(error)").foregroundColor(.red)
                             Spacer()
                         } else if viewModel.lists.isEmpty {
-                            VStack(spacing: 24) {
-                                Image(systemName: "rectangle.stack.badge.plus")
-                                    .resizable()
-                                    .scaledToFit()
-                                    .frame(width: 72, height: 72)
-                                    .foregroundColor(.accentColor.opacity(0.3))
-                                Text("No tienes listas todavía").font(.title3.bold())
-                                Button("Crear primera lista") {
-                                    showNewListSheet = true
-                                }
-                                .buttonStyle(.borderedProminent)
+                            EmptyListsAnimatedView {
+                                showNewListSheet = true
                             }
-                            .padding(.top, 60)
                             Spacer()
                         } else {
                             ProductListView(
@@ -132,9 +122,9 @@ struct HomeView: View {
             }
             Button("Cancelar", role: .cancel) {}
         } message: {
-            Text("Esta acción eliminará la lista y todos sus productos.")
+            Text("Esta acción eliminará la lista y todos sus elementos.")
         }
-        .alert("¿Eliminar este producto?", isPresented: $showDeleteProductAlert) {
+        .alert("¿Eliminar este elemento?", isPresented: $showDeleteProductAlert) {
             Button("Eliminar", role: .destructive) {
                 if let id = selectedProductID,
                    let product = viewModel.products.first(where: { $0.id == id }) {
@@ -148,7 +138,40 @@ struct HomeView: View {
                 selectedProductID = nil
             }
         } message: {
-            Text("Esta acción eliminará el producto de tu lista.")
+            Text("Esta acción eliminará el elemento de tu lista.")
         }
+    }
+}
+
+struct EmptyListsAnimatedView: View {
+    @State private var appear = false
+    let onCreate: () -> Void
+
+    var body: some View {
+        VStack(spacing: 24) {
+            Image(systemName: "rectangle.stack.badge.plus")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 72, height: 72)
+                .foregroundColor(.accentColor.opacity(0.3))
+                .scaleEffect(appear ? 1 : 0.8)
+                .opacity(appear ? 1 : 0)
+                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: appear)
+            Text("No tienes listas todavía")
+                .font(.title3.bold())
+                .scaleEffect(appear ? 1 : 0.8)
+                .opacity(appear ? 1 : 0)
+                .animation(.spring(response: 0.7, dampingFraction: 0.7).delay(0.07), value: appear)
+            Button("Crear primera lista") {
+                onCreate()
+            }
+            .buttonStyle(.borderedProminent)
+            .scaleEffect(appear ? 1 : 0.9)
+            .opacity(appear ? 1 : 0)
+            .animation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.13), value: appear)
+        }
+        .padding(.top, 60)
+        .onAppear { appear = true }
+        .onDisappear { appear = false }
     }
 }

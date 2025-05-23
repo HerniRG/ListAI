@@ -6,6 +6,7 @@ struct ListSelectorView: View {
     var showNewListSheet: () -> Void
 
     @Namespace private var chipNamespace
+    @State private var appear = false
 
     var body: some View {
         if !viewModel.lists.isEmpty {
@@ -52,6 +53,11 @@ struct ListSelectorView: View {
                 }
             }
             .padding(.vertical, 14)
+            .scaleEffect(appear ? 1 : 0.96)
+            .opacity(appear ? 1 : 0)
+            .animation(.spring(response: 0.5, dampingFraction: 0.7), value: appear)
+            .onAppear { appear = true }
+            .onDisappear { appear = false }
         }
     }
 }

@@ -2,7 +2,8 @@ import Foundation
 import Combine
 
 protocol IAUseCaseProtocol {
-    func getIngredients(for dish: String) -> AnyPublisher<[String], Error>
+    func getIngredients(for dish: String,
+                        context: IAContext) -> AnyPublisher<[String], Error>
 }
 
 final class IAUseCase: IAUseCaseProtocol {
@@ -12,7 +13,8 @@ final class IAUseCase: IAUseCaseProtocol {
         self.repository = repository
     }
 
-    func getIngredients(for dish: String) -> AnyPublisher<[String], Error> {
-        repository.getIngredients(for: dish)
+    func getIngredients(for dish: String,
+                        context: IAContext) -> AnyPublisher<[String], Error> {
+        repository.getIngredients(for: dish, context: context)
     }
 }

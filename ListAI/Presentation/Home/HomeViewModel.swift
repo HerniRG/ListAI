@@ -75,8 +75,16 @@ final class HomeViewModel: ObservableObject {
             return
         }
         
+        let nextOrden: Int
+        if products.isEmpty {
+            nextOrden = 0
+        } else {
+            nextOrden = (products.map { $0.orden ?? 0 }.max() ?? (products.count - 1)) + 1
+        }
+        
         let newProduct = ProductModel(
             id: UUID().uuidString,
+            orden: nextOrden,
             nombre: newProductName.trimmingCharacters(in: .whitespaces),
             esComprado: false,
             añadidoPorIA: false,
@@ -103,8 +111,16 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        let nextOrden: Int
+        if products.isEmpty {
+            nextOrden = 0
+        } else {
+            nextOrden = (products.map { $0.orden ?? 0 }.max() ?? (products.count - 1)) + 1
+        }
+
         let newProduct = ProductModel(
             id: UUID().uuidString,
+            orden: nextOrden,
             nombre: name.trimmingCharacters(in: .whitespaces),
             esComprado: false,
             añadidoPorIA: false,
@@ -124,12 +140,27 @@ final class HomeViewModel: ObservableObject {
     }
     
     func toggleComprado(for product: ProductModel) {
-        if let index = products.firstIndex(where: { $0.id == product.id }) {
-            products[index].esComprado.toggle()
+        guard let userID = session.userID,
+              let listID = activeList?.id,
+              let index = products.firstIndex(where: { $0.id == product.id }) else {
+            return
         }
+
+        products[index].esComprado.toggle()
+        let updatedProduct = products[index]
+
+        // Actualiza el producto en la base de datos
+        productUseCase.updateProduct(userID: userID, listID: listID, product: updatedProduct)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            } receiveValue: { _ in }
+            .store(in: &cancellables)
     }
     
-    func useIAForProductName() {
+    func useIAForProductName(context: IAContext) {
         guard let userID = session.userID,
               let listID = activeList?.id,
               !newProductName.trimmingCharacters(in: .whitespaces).isEmpty else {
@@ -138,37 +169,42 @@ final class HomeViewModel: ObservableObject {
         
         let dish = newProductName.trimmingCharacters(in: .whitespaces)
         
-        iaUseCase.getIngredients(for: dish)
+        iaUseCase.getIngredients(for: dish, context: context)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case let .failure(error) = completion {
                     self?.errorMessage = error.localizedDescription
                 }
             } receiveValue: { [weak self] ingredients in
-                let newProducts = ingredients.map {
+                guard let self = self else { return }
+                let baseOrden = self.products.isEmpty ? 0 : (self.products.map { $0.orden ?? 0 }.max() ?? (self.products.count - 1)) + 1
+                let newProducts = ingredients.enumerated().map { (index, ingredient) in
                     ProductModel(
                         id: UUID().uuidString,
-                        nombre: $0,
+                        orden: baseOrden + index,
+                        nombre: ingredient,
                         esComprado: false,
                         añadidoPorIA: true,
-                        ingredientesDe: dish
+                        ingredientesDe: dish,
                     )
                 }
                 
                 newProducts.forEach { product in
-                    self?.productUseCase.addProduct(userID: userID, listID: listID, product: product)
+                    self.productUseCase.addProduct(userID: userID, listID: listID, product: product)
                         .sink(receiveCompletion: { _ in }, receiveValue: { })
-                        .store(in: &self!.cancellables)
+                        .store(in: &self.cancellables)
                 }
                 
-                self?.products.append(contentsOf: newProducts)
-                self?.newProductName = ""
+                self.products.append(contentsOf: newProducts)
+                self.newProductName = ""
             }
             .store(in: &cancellables)
     }
     
-    func fetchIngredients(for dish: String, completion: @escaping ([String]) -> Void) {
-        iaUseCase.getIngredients(for: dish)
+    func fetchIngredients(for dish: String,
+                          context: IAContext,
+                          completion: @escaping ([String]) -> Void) {
+        iaUseCase.getIngredients(for: dish, context: context)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completionResult in
                 if case let .failure(error) = completionResult {

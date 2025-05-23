@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct HomeHeaderView: View {
+    @State private var appear = false
     var body: some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
@@ -12,6 +13,11 @@ struct HomeHeaderView: View {
             Spacer()
             ProfileIconView()
         }
+        .scaleEffect(appear ? 1 : 0.96)
+        .opacity(appear ? 1 : 0)
+        .animation(.spring(response: 0.45, dampingFraction: 0.7), value: appear)
         .padding(.bottom, 12)
+        .onAppear { appear = true }
+        .onDisappear { appear = false }
     }
 }

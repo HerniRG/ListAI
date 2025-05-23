@@ -14,17 +14,19 @@ final class IARepositoryImpl: IARepositoryProtocol {
         }
     }
     
-    func getIngredients(for dish: String) -> AnyPublisher<[String], Error> {
+    func getIngredients(for dish: String,
+                        context: IAContext) -> AnyPublisher<[String], Error> {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(APIKeys.openRouterKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        let contextLine = "CATEGORÍA ELEGIDA: \(context.rawValue)"
         // Mensajes para OpenRouter
         let systemMessage = OpenRouterRequest.Message(
             role: "system",
-            content: """
+            content: contextLine + "\n\n" + """
 Eres LISTAI, un asistente experto en generar listas breves y prácticas. Analiza el texto del usuario y decide UNA (y solo una) de las siguientes categorías:
 
 1. **RECETA** ▸ El usuario menciona un plato o preparación de comida/bebida.
@@ -36,7 +38,7 @@ Responde cumpliendo estas reglas estrictas:
 - Devuelve **solo los ítems** apropiados para la categoría elegida, **uno por línea**.
 - **Nunca mezcles categorías**.  
   - Si es *RECETA* → ingredientes genéricos (sin cantidades, marcas ni guiones).  
-  - Si es *EVENTO/PROYECTO* → objetos o tareas necesarias (sin ingredientes ni recetas).  
+  - Si es *EVENTO/PROYECTO* → objetos o tareas necesarias (sin ingredientes ni recetas).  
   - Si es *COMPRA ESPECÍFICA* → partes/componentes/variantes necesarias.
 - **No añadas numeración, guiones, puntos, viñetas, emojis, ni ningún símbolo antes de los ítems.**
 - Máximo 15 líneas. Si haces menos es perfecto.
@@ -79,7 +81,13 @@ Responde cumpliendo estas reglas estrictas:
                 let rawText = result.choices.first?.message.content ?? ""
                 let ingredientesLimpios: [String] = rawText
                     .components(separatedBy: CharacterSet.newlines)
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .map { line -> String in
+                        var clean = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                        if clean.hasPrefix("-") || clean.hasPrefix("•") {
+                            clean = clean.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+                        }
+                        return clean
+                    }
                     .filter { !$0.isEmpty }
                     .reduce(into: [String]()) { result, item in
                         if !result.contains(where: { $0.caseInsensitiveCompare(item) == .orderedSame }) {

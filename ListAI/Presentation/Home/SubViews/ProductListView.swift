@@ -17,7 +17,7 @@ struct ProductListView: View {
                     .font(.title3)
                     .fontWeight(.bold)
                 Spacer()
-                Text("Productos: \(viewModel.products.count)")
+                Text("Elementos: \(viewModel.products.count)")
                     .font(.caption)
                     .foregroundColor(.secondary)
                 
@@ -71,15 +71,7 @@ struct ProductListView: View {
             Group {
                 if viewModel.products.isEmpty {
                     Spacer()
-                    VStack(spacing: 16) {
-                        Image(systemName: "cart")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 70, height: 70)
-                            .foregroundColor(.accentColor.opacity(0.3))
-                        Text("Tu lista está vacía").font(.headline)
-                    }
-                    .transition(.opacity.combined(with: .scale))
+                    EmptyListAnimatedView()
                     Spacer()
                 } else {
                     List {
@@ -107,5 +99,29 @@ struct ProductListView: View {
         }
         .padding(.horizontal, 2)
         .frame(maxHeight: .infinity)
+    }
+}
+
+struct EmptyListAnimatedView: View {
+    @State private var appear = false
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "cart")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 70, height: 70)
+                .foregroundColor(.accentColor.opacity(0.3))
+                .scaleEffect(appear ? 1 : 0.8)
+                .opacity(appear ? 1 : 0)
+                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: appear)
+            Text("Tu lista está vacía")
+                .font(.headline)
+                .scaleEffect(appear ? 1 : 0.8)
+                .opacity(appear ? 1 : 0)
+                .animation(.spring(response: 0.7, dampingFraction: 0.7).delay(0.07), value: appear)
+        }
+        .onAppear { appear = true }
+        .onDisappear { appear = false }
     }
 }

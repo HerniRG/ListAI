@@ -34,7 +34,32 @@ struct ProductRowView: View {
                         viewModel.editingProduct = product
                     }
             }
+            
             Spacer()
+            
+            Menu {
+                Button {
+                    editedName = product.nombre
+                    viewModel.editingProduct = product
+                } label: {
+                    Label("Editar elemento", systemImage: "pencil")
+                        .foregroundColor(.blue)
+                }
+
+                Button(role: .destructive) {
+                    selectedProductID = product.id
+                    showDeleteProductAlert = true
+                } label: {
+                    Label("Eliminar elemento", systemImage: "trash")
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .foregroundColor(.primary)
+                    .padding(8)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            
         }
         .padding(.vertical, 10)
         .listRowSeparator(.hidden)
@@ -48,22 +73,6 @@ struct ProductRowView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.18) {
                 withAnimation { selectedProductID = nil }
             }
-        }
-        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-            Button(role: .destructive) {
-                selectedProductID = product.id
-                showDeleteProductAlert = true
-            } label: {
-                Label("Eliminar", systemImage: "trash")
-            }
-
-            Button {
-                editedName = product.nombre
-                viewModel.editingProduct = product
-            } label: {
-                Label("Editar", systemImage: "pencil")
-            }
-            .tint(.blue)
         }
         .transition(.asymmetric(
             insertion: .scale.combined(with: .opacity),

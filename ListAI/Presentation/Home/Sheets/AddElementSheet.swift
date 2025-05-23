@@ -7,6 +7,8 @@ struct AddElementSheet: View {
     @Binding var showIngredientSheet: Bool
     @Binding var ingredientesSugeridos: [String]
     @Binding var isFetchingIngredients: Bool
+    @State private var selectedContext: IAContext? = nil
+    @State private var showContextPicker: Bool = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -44,13 +46,29 @@ struct AddElementSheet: View {
                 .disabled(newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
 
                 Button {
+                    if !showContextPicker {
+                        // Mostrar el selector de contexto
+                        withAnimation(.easeInOut) {
+                            showContextPicker = true
+                        }
+                        return
+                    }
+
+                    // Necesitamos un contexto válido para llamar a la IA
+                    guard let ctx = selectedContext else { return }
+
                     isFetchingIngredients = true
-                    viewModel.fetchIngredients(for: newProductName) { ingredientes in
+                    let trimmedName = newProductName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    viewModel.fetchIngredients(for: trimmedName,
+                                               context: ctx) { ingredientes in
                         self.ingredientesSugeridos = ingredientes
                         isFetchingIngredients = false
                         withAnimation {
                             self.showIngredientSheet = true
                             self.isPresented = false
+                            // Reset selector
+                            self.showContextPicker = false
+                            self.selectedContext = nil
                         }
                     }
                 } label: {
@@ -67,7 +85,25 @@ struct AddElementSheet: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.indigo)
-                .disabled(isFetchingIngredients || newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(isFetchingIngredients ||
+                          newProductName.trimmingCharacters(in: .whitespaces).isEmpty ||
+                          (showContextPicker && selectedContext == nil))
+            }
+
+            if showContextPicker {
+                VStack(spacing: 8) {
+                    Text("Selecciona un contexto")
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+
+                    Picker("Tipo", selection: $selectedContext) {
+                        ForEach(IAContext.allCases) { ctx in
+                            Text(ctx.rawValue).tag(ctx as IAContext?)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                }
+                .transition(.move(edge: .top).combined(with: .opacity))
             }
 
             // Texto explicativo IA
