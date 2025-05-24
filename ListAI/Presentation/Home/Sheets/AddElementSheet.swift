@@ -9,6 +9,7 @@ struct AddElementSheet: View {
     @Binding var isFetchingIngredients: Bool
     @State private var selectedContext: IAContext? = nil
     @State private var showContextPicker: Bool = false
+    @State private var showManualDuplicateAlert = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -36,8 +37,10 @@ struct AddElementSheet: View {
                     withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
                         viewModel.addProduct(named: newProductName)
                     }
-                    newProductName = ""
-                    isPresented = false
+                    if !viewModel.manualDuplicateDetected {
+                        newProductName = ""
+                        isPresented = false
+                    }
                 } label: {
                     Label("Añadir", systemImage: "plus")
                         .frame(maxWidth: .infinity, minHeight: 48)
@@ -59,6 +62,15 @@ struct AddElementSheet: View {
 
                     isFetchingIngredients = true
                     let trimmedName = newProductName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
+                        if isFetchingIngredients {
+                            isFetchingIngredients = false
+                            showContextPicker = false
+                            selectedContext = nil
+                            isPresented = false
+                            viewModel.iaErrorMessage = "La IA ha tardado demasiado en responder."
+                        }
+                    }
                     viewModel.fetchIngredients(for: trimmedName,
                                                context: ctx) { ingredientes in
                         self.ingredientesSugeridos = ingredientes
@@ -126,6 +138,22 @@ struct AddElementSheet: View {
         }
         .padding(.horizontal, 24)
         .padding(.vertical, 32)
+        .onAppear {
+            newProductName = ""
+            selectedContext = nil
+            showContextPicker = false
+        }
+        .onChange(of: viewModel.manualDuplicateDetected) { oldValue, newValue in
+            if newValue {
+                showManualDuplicateAlert = true
+                viewModel.manualDuplicateDetected = false
+            }
+        }
+        .alert("Este elemento ya existe", isPresented: $showManualDuplicateAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Ya tienes un elemento con ese nombre en la lista.")
+        }
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
     }

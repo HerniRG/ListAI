@@ -7,6 +7,8 @@ struct ProductListView: View {
     @Binding var showDeleteProductAlert: Bool
     @Binding var showDeleteListAlert: Bool
     @Binding var editedName: String
+    
+    @State private var showDeleteSelectedAlert = false
 
     @EnvironmentObject var viewModel: HomeViewModel
 
@@ -68,6 +70,23 @@ struct ProductListView: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
+            // Botón "Eliminar seleccionados" cuando hay productos comprados
+            if viewModel.products.contains(where: { $0.esComprado }) {
+                HStack {
+                    Spacer()
+                    Button(role: .destructive) {
+                        showDeleteSelectedAlert = true
+                    } label: {
+                        Label("Eliminar seleccionados", systemImage: "trash")
+                            .font(.subheadline)
+                    }
+                    .padding(.trailing, 16)
+                    .padding(.vertical, 4)
+                }
+                .transition(.opacity.combined(with: .move(edge: .top)))
+                .animation(.easeInOut(duration: 0.3), value: viewModel.products)
+            }
+
             Group {
                 if viewModel.products.isEmpty {
                     Spacer()
@@ -99,6 +118,15 @@ struct ProductListView: View {
         }
         .padding(.horizontal, 2)
         .frame(maxHeight: .infinity)
+        .alert("¿Eliminar los elementos seleccionados?", isPresented: $showDeleteSelectedAlert) {
+            Button("Eliminar", role: .destructive) {
+                let seleccionados = viewModel.products.filter { $0.esComprado }
+                seleccionados.forEach { viewModel.deleteProduct($0) }
+            }
+            Button("Cancelar", role: .cancel) { }
+        } message: {
+            Text("Esta acción eliminará todos los elementos que has marcado como realizados.")
+        }
     }
 }
 

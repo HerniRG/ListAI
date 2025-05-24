@@ -17,6 +17,12 @@ final class IARepositoryImpl: IARepositoryProtocol {
     func getIngredients(for dish: String,
                         context: IAContext) -> AnyPublisher<[String], Error> {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
+        // Lista de modelos gratuitos que probaremos en orden
+        var candidateModels = [
+            "meta-llama/llama-3.3-8b-instruct:free", // rápido y disponible (mayo‑25)
+            "nousresearch/nous-capybara-7b:free",     // fallback 1
+            "mistralai/mistral-7b-instruct:free"      // fallback 2
+        ]
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(APIKeys.openRouterKey)", forHTTPHeaderField: "Authorization")
@@ -27,21 +33,22 @@ final class IARepositoryImpl: IARepositoryProtocol {
         let systemMessage = OpenRouterRequest.Message(
             role: "system",
             content: contextLine + "\n\n" + """
-Eres LISTAI, un asistente experto en generar listas breves y prácticas. Analiza el texto del usuario y decide UNA (y solo una) de las siguientes categorías:
+Eres **LISTAI**, un asistente que devuelve listas **breves, limpias y prácticas**.
 
-1. **RECETA** ▸ El usuario menciona un plato o preparación de comida/bebida.
-2. **EVENTO / PROYECTO** ▸ El usuario menciona organizar, preparar o planificar algo (fiesta, viaje, mudanza, estudio, bebé…).
-3. **COMPRA ESPECÍFICA** ▸ El usuario menciona un solo objeto o producto concreto.
+### CATEGORÍAS:
+1. **RECETA** → Ingredientes genéricos (sin cantidades ni marcas).
+2. **EVENTO / PROYECTO** → Objetos o tareas necesarias.
+3. **COMPRA** → Componentes o accesorios del producto a comprar.
 
-Responde cumpliendo estas reglas estrictas:
+### INSTRUCCIONES IMPORTANTES
+• Devuelve **solo los ítems**, **uno por línea**.  
+• **No incluyas** saludos, introducciones, aclaraciones ni frases resumen.  
+• **Prohibido** numeración, guiones, viñetas, emojis o signos “:”, “–”, “—”, “¡”, “?”.  
+• Evita verbos como *comprar*, *preparar*, *cortar*, *organizar*, *recordar*, *felicitar*, etc.  
+• Usa **sustantivos simples en singular**: “Globos”, “Piñata”, “Juegos”, “Queso crema”…  
+• Máximo **20 líneas**.  Menos es perfecto.
 
-- Devuelve **solo los ítems** apropiados para la categoría elegida, **uno por línea**.
-- **Nunca mezcles categorías**.  
-  - Si es *RECETA* → ingredientes genéricos (sin cantidades, marcas ni guiones).  
-  - Si es *EVENTO/PROYECTO* → objetos o tareas necesarias (sin ingredientes ni recetas).  
-  - Si es *COMPRA ESPECÍFICA* → partes/componentes/variantes necesarias.
-- **No añadas numeración, guiones, puntos, viñetas, emojis, ni ningún símbolo antes de los ítems.**
-- Máximo 15 líneas. Si haces menos es perfecto.
+Responde solo con la lista de ítems.
 """
         )
 
@@ -51,53 +58,91 @@ Responde cumpliendo estas reglas estrictas:
             systemMessage,
             OpenRouterRequest.Message(role: "user", content: userPrompt)
         ]
-        let body = OpenRouterRequest(model: "mistralai/mistral-7b-instruct:free", messages: messages, temperature: 0.7)
-        
-        do {
-            request.httpBody = try JSONEncoder().encode(body)
-#if DEBUG
-            debugPrint("📤 Cabeceras que se envían:", request.allHTTPHeaderFields ?? [:])
-            if let data = request.httpBody, let json = String(data: data, encoding: .utf8) {
-                debugPrint("📤 Cuerpo:", json)
-            }
-#endif
-        } catch {
-            return Fail(error: error).eraseToAnyPublisher()
+
+        // Helper que genera el cuerpo con el modelo indicado
+        func makeBody(model: String) -> Data? {
+            let body = OpenRouterRequest(
+                model: model,
+                messages: messages,
+                temperature: 0.5
+            )
+            return try? JSONEncoder().encode(body)
         }
-        
-        return URLSession.shared.dataTaskPublisher(for: request)
-            .tryMap { data, response in
-                if let httpResponse = response as? HTTPURLResponse {
-                    print("🔽 OpenRouter status code: \(httpResponse.statusCode)")
+
+        // Seleccionamos el primer modelo
+        request.httpBody = makeBody(model: candidateModels.removeFirst())
+
+#if DEBUG
+        debugPrint("📤 Cabeceras que se envían:", request.allHTTPHeaderFields ?? [:])
+        if let data = request.httpBody, let json = String(data: data, encoding: .utf8) {
+            debugPrint("📤 Cuerpo:", json)
+        }
+#endif
+
+        func execute(_ req: URLRequest, remaining: [String]) -> AnyPublisher<[String], Error> {
+            URLSession.shared.dataTaskPublisher(for: req)
+                .tryCatch { error -> AnyPublisher<(data: Data, response: URLResponse), URLError> in
+                    // En caso de fallo de red, reintenta con el siguiente modelo si lo hay
+                    guard let next = remaining.first else { throw error }
+                    var newReq = req
+                    newReq.httpBody = makeBody(model: next)
+                    return URLSession.shared.dataTaskPublisher(for: newReq)
+                        .eraseToAnyPublisher()
                 }
-                if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode != 200 {
-                    throw URLError(.badServerResponse)
+                .tryMap { data, response -> [String] in
+                    if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                        // Si status distinto de 200 y hay modelos restantes, reintentar
+                        if let next = remaining.first {
+                            var newReq = req
+                            newReq.httpBody = makeBody(model: next)
+                            throw URLError(.badServerResponse)
+                        }
+                        throw URLError(.badServerResponse)
+                    }
+                    
+                    let text = String(data: data, encoding: .utf8) ?? "<sin decodificar>"
+                    print("🧾 Respuesta cruda de OpenRouter:\n\(text)")
+                    
+                    let result = try JSONDecoder().decode(OpenRouterResponse.self, from: data)
+                    let rawText = result.choices.first?.message.content ?? ""
+                    let ingredientesLimpios: [String] = rawText
+                        .components(separatedBy: CharacterSet.newlines)
+                        .map { line -> String in
+                            var clean = line.trimmingCharacters(in: .whitespacesAndNewlines)
+                            if clean.hasPrefix("-") || clean.hasPrefix("•") {
+                                clean = clean.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
+                            }
+                            // Elimina verbos comunes si están al comienzo
+                            let verbs = ["comprar ", "preparar ", "cortar ", "organizar ", "armar ",
+                                         "recordar ", "felicitar ", "alta ", "hacer "]
+                            for v in verbs {
+                                if clean.lowercased().hasPrefix(v) {
+                                    clean = clean.dropFirst(v.count).trimmingCharacters(in: .whitespacesAndNewlines)
+                                    break
+                                }
+                            }
+                            // Descarta líneas demasiado largas (≥6 palabras) o con caracteres no deseados
+                            let invalidChars = [":", "¡", "!", "?"]
+                            if clean.split(separator: " ").count >= 6 { return "" }
+                            if invalidChars.contains(where: { clean.contains($0) }) { return "" }
+                            if clean.lowercased().contains("lista") || clean.lowercased().contains("recuerda") {
+                                return ""
+                            }
+                            return clean.capitalized
+                        }
+                        .filter { !$0.isEmpty }
+                        .reduce(into: [String]()) { result, item in
+                            if !result.contains(where: { $0.caseInsensitiveCompare(item) == .orderedSame }) {
+                                result.append(item)
+                            }
+                        }
+                    return ingredientesLimpios
                 }
-                
-                let text = String(data: data, encoding: .utf8) ?? "<sin decodificar>"
-                print("🧾 Respuesta cruda de OpenRouter:\n\(text)")
-                
-                let result = try JSONDecoder().decode(OpenRouterResponse.self, from: data)
-                let rawText = result.choices.first?.message.content ?? ""
-                let ingredientesLimpios: [String] = rawText
-                    .components(separatedBy: CharacterSet.newlines)
-                    .map { line -> String in
-                        var clean = line.trimmingCharacters(in: .whitespacesAndNewlines)
-                        if clean.hasPrefix("-") || clean.hasPrefix("•") {
-                            clean = clean.dropFirst().trimmingCharacters(in: .whitespacesAndNewlines)
-                        }
-                        return clean
-                    }
-                    .filter { !$0.isEmpty }
-                    .reduce(into: [String]()) { result, item in
-                        if !result.contains(where: { $0.caseInsensitiveCompare(item) == .orderedSame }) {
-                            result.append(item)
-                        }
-                    }
-                return ingredientesLimpios
-            }
-            .receive(on: DispatchQueue.main)
-            .eraseToAnyPublisher()
+                .eraseToAnyPublisher()
+        }
+
+        // Ejecutamos con fallback
+        return execute(request, remaining: candidateModels)
     }
 }
 

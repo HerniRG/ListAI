@@ -111,6 +111,20 @@ struct HomeView: View {
             }
             .navigationBarHidden(true)
         }
+        .onChange(of: viewModel.iaErrorMessage) { oldValue, newValue in
+            if newValue != nil {
+                showAddProductSheet = false
+                showIngredientSheet = false
+            }
+        }
+        .alert("Error al obtener sugerencias", isPresented: Binding<Bool>(
+            get: { viewModel.iaErrorMessage != nil },
+            set: { _ in viewModel.iaErrorMessage = nil }
+        )) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(viewModel.iaErrorMessage ?? "Ha ocurrido un error al obtener las sugerencias.")
+        }
         .alert("¿Eliminar esta lista?", isPresented: $showDeleteListAlert) {
             Button("Eliminar", role: .destructive) {
                 viewModel.deleteCurrentList()

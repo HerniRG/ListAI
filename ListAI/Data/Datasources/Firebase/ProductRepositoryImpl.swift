@@ -46,7 +46,7 @@ final class ProductRepositoryImpl: ProductRepositoryProtocol {
     func updateProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error> {
         let path = "users/\(userID)/lists/\(listID)/products"
         guard let id = product.id else {
-            return Fail(error: NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Producto sin ID"]))
+            return Fail(error: NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Elemento sin ID"]))
                 .eraseToAnyPublisher()
         }
         return Future { promise in

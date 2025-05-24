@@ -3,6 +3,7 @@ import SwiftUI
 struct EditElementSheet: View {
     @EnvironmentObject var viewModel: HomeViewModel
     @Binding var editedName: String
+    @State private var showEditDuplicateAlert = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -29,7 +30,9 @@ struct EditElementSheet: View {
                     var updated = product
                     updated.nombre = editedName
                     viewModel.editProduct(updated)
-                    viewModel.editingProduct = nil
+                    if !viewModel.editDuplicateDetected {
+                        viewModel.editingProduct = nil
+                    }
                 } label: {
                     Label("Guardar cambios", systemImage: "checkmark")
                         .frame(maxWidth: .infinity, minHeight: 48)
@@ -38,7 +41,7 @@ struct EditElementSheet: View {
                 .disabled(editedName.trimmingCharacters(in: .whitespaces).isEmpty)
 
                 // Explicación breve
-                Text("Modifica el nombre del producto y guarda los cambios.")
+                Text("Modifica el nombre del elemento y guarda los cambios.")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -60,5 +63,16 @@ struct EditElementSheet: View {
         .frame(maxWidth: 480)
         .presentationDetents([.medium])
         .presentationDragIndicator(.visible)
+        .onChange(of: viewModel.editDuplicateDetected) { oldValue, newValue in
+            if newValue {
+                showEditDuplicateAlert = true
+                viewModel.editDuplicateDetected = false
+            }
+        }
+        .alert("Este nombre ya existe", isPresented: $showEditDuplicateAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Ya tienes un elemento con ese nombre en tu lista.")
+        }
     }
 }

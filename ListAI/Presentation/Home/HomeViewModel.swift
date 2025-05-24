@@ -19,12 +19,32 @@ final class HomeViewModel: ObservableObject {
     @Published var newProductName: String = ""
     @Published var newListName: String = ""
     @Published var editingProduct: ProductModel?
+    @Published var isUsingIA: Bool = false
+    @Published var iaErrorMessage: String?
+    @Published var ignoredDuplicateNames: [String] = []
+    @Published var manualDuplicateDetected: Bool = false
+    @Published var editDuplicateDetected: Bool = false
     
     private let listUseCase: ListUseCaseProtocol
     private let productUseCase: ProductUseCaseProtocol
     private let iaUseCase: IAUseCaseProtocol
     private let session: SessionManager
     private var cancellables = Set<AnyCancellable>()
+    
+    private func isDuplicate(_ name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return products.contains {
+            $0.nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == trimmed
+        }
+    }
+
+    private func isDuplicate(_ name: String, excluding productID: String?) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return products.contains {
+            guard $0.id != productID else { return false }
+            return $0.nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == trimmed
+        }
+    }
     
     init(listUseCase: ListUseCaseProtocol, productUseCase: ProductUseCaseProtocol, iaUseCase: IAUseCaseProtocol, session: SessionManager) {
         self.listUseCase = listUseCase
@@ -111,6 +131,11 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
+        if isDuplicate(name) {
+            manualDuplicateDetected = true
+            return
+        }
+
         let nextOrden: Int
         if products.isEmpty {
             nextOrden = 0
@@ -167,25 +192,34 @@ final class HomeViewModel: ObservableObject {
             return
         }
         
+        isUsingIA = true
+        iaErrorMessage = nil
+        
         let dish = newProductName.trimmingCharacters(in: .whitespaces)
         
         iaUseCase.getIngredients(for: dish, context: context)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
+                guard let self = self else { return }
+                self.isUsingIA = false
                 if case let .failure(error) = completion {
-                    self?.errorMessage = error.localizedDescription
+                    self.iaErrorMessage = "Ocurrió un error al usar la IA: \(error.localizedDescription)"
                 }
             } receiveValue: { [weak self] ingredients in
                 guard let self = self else { return }
                 let baseOrden = self.products.isEmpty ? 0 : (self.products.map { $0.orden ?? 0 }.max() ?? (self.products.count - 1)) + 1
-                let newProducts = ingredients.enumerated().map { (index, ingredient) in
+
+                let filtered = ingredients.filter { !self.isDuplicate($0) }
+                self.ignoredDuplicateNames = ingredients.filter { self.isDuplicate($0) }
+
+                let newProducts = filtered.enumerated().map { (index, ingredient) in
                     ProductModel(
                         id: UUID().uuidString,
                         orden: baseOrden + index,
                         nombre: ingredient,
                         esComprado: false,
                         añadidoPorIA: true,
-                        ingredientesDe: dish,
+                        ingredientesDe: dish
                     )
                 }
                 
@@ -211,8 +245,14 @@ final class HomeViewModel: ObservableObject {
                     self?.errorMessage = error.localizedDescription
                     completion([])
                 }
-            } receiveValue: { ingredientes in
-                completion(ingredientes)
+            } receiveValue: { [weak self] ingredientes in
+                guard let self = self else {
+                    completion([])
+                    return
+                }
+                
+                let nuevos = ingredientes.filter { !self.isDuplicate($0) }
+                completion(nuevos)
             }
             .store(in: &cancellables)
     }
@@ -285,7 +325,12 @@ final class HomeViewModel: ObservableObject {
     func editProduct(_ product: ProductModel) {
         guard let userID = session.userID,
               let listID = activeList?.id else { return }
-        
+
+        if isDuplicate(product.nombre, excluding: product.id) {
+            editDuplicateDetected = true
+            return
+        }
+
         productUseCase.updateProduct(userID: userID, listID: listID, product: product)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
