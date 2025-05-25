@@ -6,6 +6,9 @@ protocol AuthUseCaseProtocol {
     func register(email: String, password: String) -> AnyPublisher<String, Error>
     func logout() -> AnyPublisher<Void, Error>
     func getCurrentUserID() -> String?
+    func deleteAccount() -> AnyPublisher<Void, Error>
+    func getCurrentUserEmail() -> String?
+    func sendPasswordReset(email: String) -> AnyPublisher<Void, Error>
 }
 
 final class AuthUseCase: AuthUseCaseProtocol {
@@ -29,5 +32,17 @@ final class AuthUseCase: AuthUseCaseProtocol {
 
     func getCurrentUserID() -> String? {
         repository.getCurrentUserID()
+    }
+
+    func deleteAccount() -> AnyPublisher<Void, Error> {
+        repository.deleteAccount()
+    }
+    
+    func getCurrentUserEmail() -> String? {
+        repository.getCurrentUserEmail()
+    }
+    
+    func sendPasswordReset(email: String) -> AnyPublisher<Void, Error> {
+        repository.sendPasswordReset(email: email)
     }
 }

@@ -14,6 +14,9 @@ struct RootView: View {
                         iaUseCase: di.iaUseCase,
                         session: session
                     ))
+                    .environmentObject(ProfileViewModel(
+                        authUseCase: di.authUseCase
+                    ))
             } else {
                 AuthRouterView()
                     .environmentObject(LoginViewModel(authUseCase: di.authUseCase, session: session))
