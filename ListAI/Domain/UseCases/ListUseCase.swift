@@ -2,7 +2,7 @@ import Combine
 
 protocol ListUseCaseProtocol {
     func fetchLists(for userID: String) -> AnyPublisher<[ShoppingListModel], Error>
-    func createList(for userID: String, name: String) -> AnyPublisher<ShoppingListModel, Error>
+    func createList(for userID: String, name: String, context: IAContext) -> AnyPublisher<ShoppingListModel, Error>
     func deleteList(for userID: String, listID: String) -> AnyPublisher<Void, Error>
 }
 
@@ -17,8 +17,8 @@ final class ListUseCase: ListUseCaseProtocol {
         repository.getAllLists(userID: userID)
     }
 
-    func createList(for userID: String, name: String) -> AnyPublisher<ShoppingListModel, Error> {
-        repository.createList(userID: userID, name: name)
+    func createList(for userID: String, name: String, context: IAContext) -> AnyPublisher<ShoppingListModel, Error> {
+        repository.createList(userID: userID, name: name, context: context)
     }
 
     func deleteList(for userID: String, listID: String) -> AnyPublisher<Void, Error> {

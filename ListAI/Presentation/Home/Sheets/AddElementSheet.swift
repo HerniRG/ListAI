@@ -7,8 +7,6 @@ struct AddElementSheet: View {
     @Binding var showIngredientSheet: Bool
     @Binding var ingredientesSugeridos: [String]
     @Binding var isFetchingIngredients: Bool
-    @State private var selectedContext: IAContext? = nil
-    @State private var showContextPicker: Bool = false
     @State private var showManualDuplicateAlert = false
 
     var body: some View {
@@ -49,24 +47,13 @@ struct AddElementSheet: View {
                 .disabled(newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
 
                 Button {
-                    if !showContextPicker {
-                        // Mostrar el selector de contexto
-                        withAnimation(.easeInOut) {
-                            showContextPicker = true
-                        }
-                        return
-                    }
-
-                    // Necesitamos un contexto válido para llamar a la IA
-                    guard let ctx = selectedContext else { return }
+                    guard let ctx = viewModel.activeList?.context else { return }
 
                     isFetchingIngredients = true
                     let trimmedName = newProductName.trimmingCharacters(in: .whitespacesAndNewlines)
                     DispatchQueue.main.asyncAfter(deadline: .now() + 15) {
                         if isFetchingIngredients {
                             isFetchingIngredients = false
-                            showContextPicker = false
-                            selectedContext = nil
                             isPresented = false
                             viewModel.iaErrorMessage = "La IA ha tardado demasiado en responder."
                         }
@@ -78,9 +65,6 @@ struct AddElementSheet: View {
                         withAnimation {
                             self.showIngredientSheet = true
                             self.isPresented = false
-                            // Reset selector
-                            self.showContextPicker = false
-                            self.selectedContext = nil
                         }
                     }
                 } label: {
@@ -98,28 +82,11 @@ struct AddElementSheet: View {
                 .buttonStyle(.borderedProminent)
                 .tint(.indigo)
                 .disabled(isFetchingIngredients ||
-                          newProductName.trimmingCharacters(in: .whitespaces).isEmpty ||
-                          (showContextPicker && selectedContext == nil))
-            }
-
-            if showContextPicker {
-                VStack(spacing: 8) {
-                    Text("Selecciona un contexto")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-
-                    Picker("Tipo", selection: $selectedContext) {
-                        ForEach(IAContext.allCases) { ctx in
-                            Text(ctx.rawValue).tag(ctx as IAContext?)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-                .transition(.move(edge: .top).combined(with: .opacity))
+                          newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
             }
 
             // Texto explicativo IA
-            Text("La IA sugiere elementos según lo que escribas: platos, viajes, fiestas o cualquier otra idea.")
+            Text("La IA sugiere elementos según lo que escribas y el tipo de lista que has creado, como recetas, eventos o compras.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -140,8 +107,6 @@ struct AddElementSheet: View {
         .padding(.vertical, 32)
         .onAppear {
             newProductName = ""
-            selectedContext = nil
-            showContextPicker = false
         }
         .onChange(of: viewModel.manualDuplicateDetected) { oldValue, newValue in
             if newValue {

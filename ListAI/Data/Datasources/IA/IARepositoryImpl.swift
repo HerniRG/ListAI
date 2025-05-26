@@ -144,6 +144,78 @@ Responde solo con la lista de ítems.
         // Ejecutamos con fallback
         return execute(request, remaining: candidateModels)
     }
+    
+    func analyzeList(name: String,
+                     context: IAContext,
+                     pending: [String],
+                     done: [String]) -> AnyPublisher<AnalysisResult, Error> {
+
+        let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(APIKeys.openRouterKey)", forHTTPHeaderField: "Authorization")
+        request.addValue("application/json", forHTTPHeaderField: "Content-Type")
+
+        // Construir prompt
+        let prompt = """
+        Eres LISTAI, un asistente experto en organización de listas.
+
+        LISTA: "\(name)"
+        TIPO: \(context.rawValue)
+
+        PENDIENTES (\(pending.count)):
+        \(pending.map { "- \($0)" }.joined(separator: "\n"))
+
+        COMPRADOS (\(done.count)):
+        \(done.map { "- \($0)" }.joined(separator: "\n"))
+
+        INSTRUCCIONES
+        1. Devuelve hasta 10 ítems que FALTEN (uno por línea, sin guiones).
+        2. Después añade 1-2 consejos breves (≤30 palabras cada uno).
+        Formato EXACTO:
+
+        SUGERENCIAS:
+        […]
+
+        CONSEJOS:
+        […]
+        """
+
+        let messages = [
+            OpenRouterRequest.Message(role: "system", content: prompt)
+        ]
+
+        let body = OpenRouterRequest(model: "meta-llama/llama-3.3-8b-instruct:free",
+                                     messages: messages,
+                                     temperature: 0.5)
+        request.httpBody = try? JSONEncoder().encode(body)
+
+        return URLSession.shared.dataTaskPublisher(for: request)
+            .tryMap { data, response -> AnalysisResult in
+                guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                    throw URLError(.badServerResponse)
+                }
+                let raw = try JSONDecoder().decode(OpenRouterResponse.self, from: data)
+                    .choices.first?.message.content ?? ""
+
+                // Parsear bloques
+                let parts = raw.components(separatedBy: "\n\n")
+                let sug = parts.first { $0.hasPrefix("SUGERENCIAS:") }?
+                    .replacingOccurrences(of: "SUGERENCIAS:", with: "")
+                    .components(separatedBy: CharacterSet.newlines)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty } ?? []
+
+                let tips = parts.first { $0.hasPrefix("CONSEJOS:") }?
+                    .replacingOccurrences(of: "CONSEJOS:", with: "")
+                    .components(separatedBy: CharacterSet.newlines)
+                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .filter { !$0.isEmpty } ?? []
+
+                return AnalysisResult(suggestions: sug, tips: tips)
+            }
+            .eraseToAnyPublisher()
+    }
 }
 
 private struct OpenRouterResponse: Decodable {

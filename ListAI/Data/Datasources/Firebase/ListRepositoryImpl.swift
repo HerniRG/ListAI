@@ -24,13 +24,14 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
         .eraseToAnyPublisher()
     }
     
-    func createList(userID: String, name: String) -> AnyPublisher<ShoppingListModel, Error> {
+    func createList(userID: String, name: String, context: IAContext) -> AnyPublisher<ShoppingListModel, Error> {
         let path = "users/\(userID)/lists"
         let newList = ShoppingListModel(
             id: UUID().uuidString,
             nombre: name,
             fechaCreacion: Date(),
-            esFavorita: false
+            esFavorita: false,
+            context: context
         )
         
         return Future { promise in

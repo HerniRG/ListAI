@@ -18,6 +18,32 @@ struct HomeView: View {
     @State private var selectedProductID: String? = nil
     @State private var fabRotation: Double = 0
 
+    // Floating action buttons for HomeView
+    private var floatingButtons: some View {
+        VStack {
+            Spacer()
+            HStack {
+                // Botón IA: esquina inferior izquierda
+                FloatingIAButton {
+                    viewModel.analyzeActiveList()
+                }
+                .padding(.bottom, 24)
+                .padding(.leading, 16)
+
+                Spacer()
+
+                // Botón Añadir: esquina inferior derecha
+                FloatingAddButton(
+                    fabRotation: $fabRotation,
+                    showAddProductSheet: $showAddProductSheet
+                )
+                .padding(.bottom, 24)
+                .padding(.trailing, 16)
+            }
+        }
+        .transition(.scale)
+    }
+
     var body: some View {
         NavigationView {
             ZStack {
@@ -63,19 +89,12 @@ struct HomeView: View {
                 }
 
                 if !viewModel.lists.isEmpty {
-                    VStack {
-                        Spacer()
-                        HStack {
-                            Spacer()
-                            FloatingAddButton(
-                                fabRotation: $fabRotation,
-                                showAddProductSheet: $showAddProductSheet
-                            )
-                            .padding(.bottom, 24)
-                            .padding(.trailing, 16)
-                        }
+                    // Animación de análisis IA (nuevo efecto visual)
+                    if viewModel.isAnalyzing {
+                        IAThinkingOverlay()
+                            .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
                     }
-                    .transition(.scale)
+                    floatingButtons
                 }
             }
             .sheet(isPresented: $showAddProductSheet) {
@@ -96,6 +115,9 @@ struct HomeView: View {
                     ingredientesSugeridos: $ingredientesSugeridos
                 )
                 .environmentObject(viewModel)
+            }
+            .sheet(item: $viewModel.analysis) { result in
+                AnalysisSheetView(analysis: result)
             }
             .sheet(item: $viewModel.editingProduct) { _ in
                 EditElementSheet(editedName: $editedName)
@@ -160,7 +182,7 @@ struct HomeView: View {
 struct EmptyListsAnimatedView: View {
     @State private var appear = false
     let onCreate: () -> Void
-
+    
     var body: some View {
         VStack(spacing: 24) {
             Image(systemName: "rectangle.stack.badge.plus")
@@ -187,5 +209,41 @@ struct EmptyListsAnimatedView: View {
         .padding(.top, 60)
         .onAppear { appear = true }
         .onDisappear { appear = false }
+    }
+    
+}
+
+struct IAThinkingOverlay: View {
+    @State private var animate = false
+
+    var body: some View {
+        ZStack {
+            Color.indigo
+                .opacity(animate ? 0.35 : 0.15)
+                .ignoresSafeArea()
+                .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: animate)
+
+            VStack(spacing: 16) {
+                Image(systemName: "sparkles")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 48, height: 48)
+                    .foregroundColor(.white)
+                    .scaleEffect(animate ? 1.25 : 0.9)
+                    .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: animate)
+
+                Text("Analizando…")
+                    .font(.headline)
+                    .foregroundColor(.white)
+                    .opacity(animate ? 1 : 0.6)
+                    .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: animate)
+            }
+        }
+        .onAppear {
+            animate = true
+        }
+        .onDisappear {
+            animate = false
+        }
     }
 }

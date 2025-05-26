@@ -13,6 +13,7 @@ final class HomeViewModel: ObservableObject {
         }
     }
     @Published var lists: [ShoppingListModel] = []
+    @Published var selectedContextForNewList: IAContext = .receta
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var products: [ProductModel] = []
@@ -24,6 +25,8 @@ final class HomeViewModel: ObservableObject {
     @Published var ignoredDuplicateNames: [String] = []
     @Published var manualDuplicateDetected: Bool = false
     @Published var editDuplicateDetected: Bool = false
+    @Published var analysis: AnalysisResult? = nil
+    @Published var isAnalyzing: Bool = false
     
     private let listUseCase: ListUseCaseProtocol
     private let productUseCase: ProductUseCaseProtocol
@@ -185,9 +188,10 @@ final class HomeViewModel: ObservableObject {
             .store(in: &cancellables)
     }
     
-    func useIAForProductName(context: IAContext) {
+    func useIAForProductName() {
         guard let userID = session.userID,
               let listID = activeList?.id,
+              let context = activeList?.context,
               !newProductName.trimmingCharacters(in: .whitespaces).isEmpty else {
             return
         }
@@ -290,7 +294,11 @@ final class HomeViewModel: ObservableObject {
         isLoading = true
         errorMessage = nil
         
-        listUseCase.createList(for: userID, name: newListName.trimmingCharacters(in: .whitespaces))
+        listUseCase.createList(
+            for: userID,
+            name: newListName.trimmingCharacters(in: .whitespaces),
+            context: selectedContextForNewList
+        )
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 self?.isLoading = false
@@ -352,17 +360,21 @@ final class HomeViewModel: ObservableObject {
             return
         }
         
-        listUseCase.createList(for: userID, name: nombre.trimmingCharacters(in: .whitespaces))
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                if case let .failure(error) = completion {
-                    self?.errorMessage = error.localizedDescription
-                }
-            } receiveValue: { [weak self] newList in
-                self?.lists.append(newList)
-                self?.activeList = newList
+        listUseCase.createList(
+            for: userID,
+            name: nombre.trimmingCharacters(in: .whitespaces),
+            context: selectedContextForNewList
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] completion in
+            if case let .failure(error) = completion {
+                self?.errorMessage = error.localizedDescription
             }
-            .store(in: &cancellables)
+        } receiveValue: { [weak self] newList in
+            self?.lists.append(newList)
+            self?.activeList = newList
+        }
+        .store(in: &cancellables)
     }
     
     
@@ -401,5 +413,27 @@ final class HomeViewModel: ObservableObject {
                 .sink(receiveCompletion: { _ in }, receiveValue: { })
                 .store(in: &cancellables)
         }
+    }
+    
+    func analyzeActiveList() {
+        guard let list = activeList else { return }
+        let pending = products.filter { !$0.esComprado }.map { $0.nombre }
+        let done = products.filter { $0.esComprado }.map { $0.nombre }
+
+        isAnalyzing = true
+        iaUseCase.analyzeList(name: list.nombre,
+                              context: list.context,
+                              pending: pending,
+                              done: done)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                self?.isAnalyzing = false
+                if case let .failure(error) = completion {
+                    self?.iaErrorMessage = error.localizedDescription
+                }
+            } receiveValue: { [weak self] result in
+                self?.analysis = result
+            }
+            .store(in: &cancellables)
     }
 }
