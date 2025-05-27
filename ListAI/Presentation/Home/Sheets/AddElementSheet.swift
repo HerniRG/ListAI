@@ -86,10 +86,11 @@ struct AddElementSheet: View {
             }
 
             // Texto explicativo IA
-            Text("La IA sugiere elementos según lo que escribas y el tipo de lista que has creado, como recetas, eventos o compras.")
+            Text("La IA sugiere elementos según lo que escribas y el tipo de lista que has creado. Sé lo más específico posible para obtener mejores resultados.")
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal)
 
             // Botón cancelar
@@ -123,3 +124,4 @@ struct AddElementSheet: View {
         .presentationDragIndicator(.visible)
     }
 }
+ 

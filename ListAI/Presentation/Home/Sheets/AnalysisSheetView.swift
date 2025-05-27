@@ -14,6 +14,7 @@ struct AnalysisSheetView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var tempSuggestions: [String] = []
+    @State private var showDuplicateAlert = false
     
     var body: some View {
         NavigationView {
@@ -51,6 +52,7 @@ struct AnalysisSheetView: View {
                                 }
                                 .padding(.vertical, 4)
                                 .contentShape(Rectangle())
+                                .background(Color.clear)
                                 .onTapGesture {
                                     Haptic.light()
                                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -99,12 +101,31 @@ struct AnalysisSheetView: View {
         .presentationDetents([.large])
         .presentationDragIndicator(.visible)
         .transition(.move(edge: .bottom).combined(with: .opacity))
+        .alert("Este elemento ya existe", isPresented: $showDuplicateAlert) {
+            Button("OK", role: .cancel) { }
+        } message: {
+            Text("Ya tienes un elemento con ese nombre en tu lista.")
+        }
     }
     
     // MARK: - Helpers
     private func addSuggestionToList(_ name: String) {
+        if viewModel.products.contains(where: { $0.nombre.lowercased() == name.lowercased() }) {
+            showDuplicateAlert = true
+            return
+        }
         viewModel.addProduct(named: name)
         // Eliminamos de la lista local para feedback rápido
-        tempSuggestions.removeAll { $0 == name }
+        if let index = tempSuggestions.firstIndex(of: name) {
+            let suggestion = tempSuggestions[index] + " (añadido)"
+            tempSuggestions[index] = suggestion
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                if let idx = tempSuggestions.firstIndex(of: suggestion) {
+                    _ = withAnimation {
+                        tempSuggestions.remove(at: idx)
+                    }
+                }
+            }
+        }
     }
 }

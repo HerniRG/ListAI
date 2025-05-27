@@ -201,7 +201,7 @@ final class HomeViewModel: ObservableObject {
         
         let dish = newProductName.trimmingCharacters(in: .whitespaces)
         
-        iaUseCase.getIngredients(for: dish, context: context)
+        iaUseCase.getIngredients(for: dish, context: context, listName: activeList?.nombre ?? "")
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 guard let self = self else { return }
@@ -242,11 +242,19 @@ final class HomeViewModel: ObservableObject {
     func fetchIngredients(for dish: String,
                           context: IAContext,
                           completion: @escaping ([String]) -> Void) {
-        iaUseCase.getIngredients(for: dish, context: context)
+        
+        guard let listName = activeList?.nombre else {
+            iaErrorMessage = "Falta el nombre de la lista"
+            completion([])
+            return
+        }
+
+        iaUseCase.getIngredients(for: dish, context: context, listName: listName)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completionResult in
-                if case let .failure(error) = completionResult {
-                    self?.errorMessage = error.localizedDescription
+                if case .failure(_) = completionResult {
+                    self?.iaErrorMessage = "Ocurrió un error al usar la IA"
+                    self?.isUsingIA = false
                     completion([])
                 }
             } receiveValue: { [weak self] ingredientes in
@@ -254,7 +262,6 @@ final class HomeViewModel: ObservableObject {
                     completion([])
                     return
                 }
-                
                 let nuevos = ingredientes.filter { !self.isDuplicate($0) }
                 completion(nuevos)
             }
@@ -432,7 +439,15 @@ final class HomeViewModel: ObservableObject {
                     self?.iaErrorMessage = error.localizedDescription
                 }
             } receiveValue: { [weak self] result in
-                self?.analysis = result
+                guard let self = self else { return }
+                // Filter out suggestions that are already present in either pending or done
+                let allNames = Set(self.products.map { $0.nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
+                let filteredSuggestions = result.suggestions.filter {
+                    !allNames.contains($0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+                }
+                var filteredResult = result
+                filteredResult.suggestions = filteredSuggestions
+                self.analysis = filteredResult
             }
             .store(in: &cancellables)
     }

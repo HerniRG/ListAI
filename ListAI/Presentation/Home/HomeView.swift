@@ -86,6 +86,7 @@ struct HomeView: View {
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .ignoresSafeArea(edges: .bottom)
                 }
 
                 if !viewModel.lists.isEmpty {
@@ -175,75 +176,6 @@ struct HomeView: View {
             }
         } message: {
             Text("Esta acción eliminará el elemento de tu lista.")
-        }
-    }
-}
-
-struct EmptyListsAnimatedView: View {
-    @State private var appear = false
-    let onCreate: () -> Void
-    
-    var body: some View {
-        VStack(spacing: 24) {
-            Image(systemName: "rectangle.stack.badge.plus")
-                .resizable()
-                .scaledToFit()
-                .frame(width: 72, height: 72)
-                .foregroundColor(.accentColor.opacity(0.3))
-                .scaleEffect(appear ? 1 : 0.8)
-                .opacity(appear ? 1 : 0)
-                .animation(.spring(response: 0.5, dampingFraction: 0.6), value: appear)
-            Text("No tienes listas todavía")
-                .font(.title3.bold())
-                .scaleEffect(appear ? 1 : 0.8)
-                .opacity(appear ? 1 : 0)
-                .animation(.spring(response: 0.7, dampingFraction: 0.7).delay(0.07), value: appear)
-            Button("Crear primera lista") {
-                onCreate()
-            }
-            .buttonStyle(.borderedProminent)
-            .scaleEffect(appear ? 1 : 0.9)
-            .opacity(appear ? 1 : 0)
-            .animation(.spring(response: 0.8, dampingFraction: 0.7).delay(0.13), value: appear)
-        }
-        .padding(.top, 60)
-        .onAppear { appear = true }
-        .onDisappear { appear = false }
-    }
-    
-}
-
-struct IAThinkingOverlay: View {
-    @State private var animate = false
-
-    var body: some View {
-        ZStack {
-            Color.indigo
-                .opacity(animate ? 0.35 : 0.15)
-                .ignoresSafeArea()
-                .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: animate)
-
-            VStack(spacing: 16) {
-                Image(systemName: "sparkles")
-                    .resizable()
-                    .scaledToFit()
-                    .frame(width: 48, height: 48)
-                    .foregroundColor(.white)
-                    .scaleEffect(animate ? 1.25 : 0.9)
-                    .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: animate)
-
-                Text("Analizando…")
-                    .font(.headline)
-                    .foregroundColor(.white)
-                    .opacity(animate ? 1 : 0.6)
-                    .animation(.easeInOut(duration: 1).repeatForever(autoreverses: true), value: animate)
-            }
-        }
-        .onAppear {
-            animate = true
-        }
-        .onDisappear {
-            animate = false
         }
     }
 }

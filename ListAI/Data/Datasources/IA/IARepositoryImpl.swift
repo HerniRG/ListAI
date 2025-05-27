@@ -15,7 +15,8 @@ final class IARepositoryImpl: IARepositoryProtocol {
     }
     
     func getIngredients(for dish: String,
-                        context: IAContext) -> AnyPublisher<[String], Error> {
+                        context: IAContext,
+                        listName: String) -> AnyPublisher<[String], Error> {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         // Lista de modelos gratuitos que probaremos en orden
         var candidateModels = [
@@ -28,7 +29,11 @@ final class IARepositoryImpl: IARepositoryProtocol {
         request.setValue("Bearer \(APIKeys.openRouterKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
-        let contextLine = "CATEGORÍA ELEGIDA: \(context.rawValue)"
+        let contextLine = """
+        CATEGORÍA: \(context.rawValue)
+        NOMBRE DE LA LISTA: "\(listName)" → Este nombre aporta información sobre el contenido o el objetivo de la lista. Utilízalo como referencia para generar ítems adecuados.
+        Todos los ítems deben estar redactados en español de España, evitando regionalismos latinoamericanos. Por ejemplo, “patatas” en lugar de “papas”, “zumo” en lugar de “jugo”, etc.
+        """
         // Mensajes para OpenRouter
         let systemMessage = OpenRouterRequest.Message(
             role: "system",
@@ -150,6 +155,14 @@ Responde solo con la lista de ítems.
                      pending: [String],
                      done: [String]) -> AnyPublisher<AnalysisResult, Error> {
 
+        let pendientesTexto = pending.isEmpty
+            ? "—"
+            : pending.map { "- \($0)" }.joined(separator: "\n")
+
+        let compradosTexto = done.isEmpty
+            ? "—"
+            : done.map { "- \($0)" }.joined(separator: "\n")
+
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -163,22 +176,26 @@ Responde solo con la lista de ítems.
         LISTA: "\(name)"
         TIPO: \(context.rawValue)
 
-        PENDIENTES (\(pending.count)):
-        \(pending.map { "- \($0)" }.joined(separator: "\n"))
+        PENDIENTES (no repitas ninguno):
+        \(pendientesTexto)
 
-        COMPRADOS (\(done.count)):
-        \(done.map { "- \($0)" }.joined(separator: "\n"))
+        COMPRADOS (no repitas ninguno):
+        \(compradosTexto)
+
+        Redacta todo en español de España, evitando regionalismos como “papas” o “jugo”.
 
         INSTRUCCIONES
-        1. Devuelve hasta 10 ítems que FALTEN (uno por línea, sin guiones).
-        2. Después añade 1-2 consejos breves (≤30 palabras cada uno).
-        Formato EXACTO:
+        1. Devuelve **máx. 10 ítems NUEVOS** que no aparezcan en pendientes ni comprados, **uno por línea y sin guiones**.
+        2. Después añade **1–2-3 consejos breves** (≤30 palabras cada uno), **uno por línea y sin guiones**.
 
+        FORMATO EXACTO:
         SUGERENCIAS:
         […]
 
         CONSEJOS:
         […]
+
+        Añade ítems útiles y redactados en español de España. No repitas ítems. Sigue estrictamente el formato solicitado.
         """
 
         let messages = [
@@ -203,14 +220,25 @@ Responde solo con la lista de ítems.
                 let sug = parts.first { $0.hasPrefix("SUGERENCIAS:") }?
                     .replacingOccurrences(of: "SUGERENCIAS:", with: "")
                     .components(separatedBy: CharacterSet.newlines)
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).replacingOccurrences(of: "^-\\s*", with: "", options: .regularExpression) }
                     .filter { !$0.isEmpty } ?? []
 
-                let tips = parts.first { $0.hasPrefix("CONSEJOS:") }?
-                    .replacingOccurrences(of: "CONSEJOS:", with: "")
-                    .components(separatedBy: CharacterSet.newlines)
-                    .map { $0.trimmingCharacters(in: .whitespaces) }
-                    .filter { !$0.isEmpty } ?? []
+                let tips: [String]
+                if let consejosRaw = parts.first(where: { $0.hasPrefix("CONSEJOS:") }) {
+                    tips = consejosRaw
+                        .replacingOccurrences(of: "CONSEJOS:", with: "")
+                        .components(separatedBy: CharacterSet.newlines)
+                        .map {
+                            var tip = $0.trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                            if tip.hasPrefix("-") || tip.hasPrefix("•") {
+                                tip = String(tip.dropFirst()).trimmingCharacters(in: CharacterSet.whitespacesAndNewlines)
+                            }
+                            return tip
+                        }
+                        .filter { !$0.isEmpty }
+                } else {
+                    tips = []
+                }
 
                 return AnalysisResult(suggestions: sug, tips: tips)
             }

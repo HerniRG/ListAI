@@ -3,7 +3,8 @@ import Combine
 
 protocol IAUseCaseProtocol {
     func getIngredients(for dish: String,
-                        context: IAContext) -> AnyPublisher<[String], Error>
+                        context: IAContext,
+                        listName: String) -> AnyPublisher<[String], Error>
     func analyzeList(name: String,
                      context: IAContext,
                      pending: [String],
@@ -18,8 +19,9 @@ final class IAUseCase: IAUseCaseProtocol {
     }
 
     func getIngredients(for dish: String,
-                        context: IAContext) -> AnyPublisher<[String], Error> {
-        repository.getIngredients(for: dish, context: context)
+                        context: IAContext,
+                        listName: String) -> AnyPublisher<[String], Error> {
+        repository.getIngredients(for: dish, context: context, listName: listName)
     }
     
     func analyzeList(name: String,
