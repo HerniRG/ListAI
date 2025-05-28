@@ -12,7 +12,8 @@ struct RootView: View {
                         listUseCase: di.listUseCase,
                         productUseCase: di.productUseCase,
                         iaUseCase: di.iaUseCase,
-                        session: session
+                        session: session,
+                        authUseCase: di.authUseCase
                     ))
                     .environmentObject(ProfileViewModel(
                         authUseCase: di.authUseCase

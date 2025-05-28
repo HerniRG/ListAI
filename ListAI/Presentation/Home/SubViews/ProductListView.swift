@@ -24,10 +24,24 @@ struct ProductListView: View {
                     .foregroundColor(.secondary)
                 
                 Menu {
-                    Button(role: .destructive) {
-                        showDeleteListAlert = true
+                    if let sharedWith = list.sharedWith, sharedWith.count > 1 {
+                        Button(role: .destructive) {
+                            viewModel.deleteList(listID: list.id ?? "")
+                        } label: {
+                            Label("Salir de la lista", systemImage: "rectangle.portrait.and.arrow.right")
+                        }
+                    } else {
+                        Button(role: .destructive) {
+                            viewModel.deleteList(listID: list.id ?? "")
+                        } label: {
+                            Label("Eliminar lista", systemImage: "trash")
+                        }
+                    }
+
+                    Button {
+                        viewModel.presentShareSheet(for: list)
                     } label: {
-                        Label("Eliminar lista", systemImage: "trash")
+                        Label("Compartir lista", systemImage: "person.crop.circle.badge.plus")
                     }
                 } label: {
                     Image(systemName: "ellipsis.circle")

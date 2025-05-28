@@ -132,6 +132,17 @@ struct HomeView: View {
                 )
                 .environmentObject(viewModel)
             }
+            .sheet(isPresented: $viewModel.isShowingShareSheet) {
+                ShareListSheet(isPresented: $viewModel.isShowingShareSheet) { email in
+                    viewModel.shareActiveList(withEmail: email)
+                }
+            }
+            .onAppear {
+                viewModel.startListeningToLists()
+            }
+            .onDisappear {
+                viewModel.stopListeningToLists()
+            }
             .navigationBarHidden(true)
         }
         .onChange(of: viewModel.iaErrorMessage) { oldValue, newValue in
@@ -150,7 +161,11 @@ struct HomeView: View {
         }
         .alert("¿Eliminar esta lista?", isPresented: $showDeleteListAlert) {
             Button("Eliminar", role: .destructive) {
-                viewModel.deleteCurrentList()
+                guard !viewModel.lists.isEmpty else { return }
+                let listID = viewModel.lists[selectedPageIndex].id
+                if let listID {
+                    viewModel.deleteList(listID: listID)
+                }
                 withAnimation {
                     if !viewModel.lists.isEmpty {
                         selectedPageIndex = 0

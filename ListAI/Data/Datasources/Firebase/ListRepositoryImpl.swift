@@ -1,15 +1,18 @@
 import Foundation
 import Combine
 import FirebaseFirestore
+import FirebaseAuth
 
 final class ListRepositoryImpl: ListRepositoryProtocol {
     
     private lazy var db = Firestore.firestore()
     
     func getAllLists(userID: String) -> AnyPublisher<[ShoppingListModel], Error> {
-        let path = "users/\(userID)/lists"
+        guard let email = Auth.auth().currentUser?.email else {
+            return Fail(error: NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Usuario no autenticado"])).eraseToAnyPublisher()
+        }
         return Future { promise in
-            self.db.collection(path).getDocuments { snapshot, error in
+            self.db.collection("lists").whereField("sharedWith", arrayContains: email).getDocuments { snapshot, error in
                 if let error = error {
                     return promise(.failure(error))
                 }
@@ -23,20 +26,38 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
         }
         .eraseToAnyPublisher()
     }
+
+    func shareList(listID: String, withEmail email: String) -> AnyPublisher<Void, Error> {
+        let docRef = db.document("lists/\(listID)")
+        return Future { promise in
+            docRef.updateData([
+                "sharedWith": FieldValue.arrayUnion([email])
+            ]) { error in
+                if let error = error {
+                    return promise(.failure(error))
+                }
+                promise(.success(()))
+            }
+        }
+        .eraseToAnyPublisher()
+    }
     
     func createList(userID: String, name: String, context: IAContext) -> AnyPublisher<ShoppingListModel, Error> {
-        let path = "users/\(userID)/lists"
+        guard let email = Auth.auth().currentUser?.email else {
+            return Fail(error: NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Usuario no autenticado"])).eraseToAnyPublisher()
+        }
         let newList = ShoppingListModel(
             id: UUID().uuidString,
             nombre: name,
             fechaCreacion: Date(),
             esFavorita: false,
+            sharedWith: [email],
             context: context
         )
         
         return Future { promise in
             do {
-                try self.db.collection(path).document(newList.id ?? UUID().uuidString).setData(from: newList) {
+                try self.db.collection("lists").document(newList.id ?? UUID().uuidString).setData(from: newList) {
                     if let error = $0 {
                         return promise(.failure(error))
                     }
@@ -50,13 +71,39 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
     }
     
     func deleteList(userID: String, listID: String) -> AnyPublisher<Void, Error> {
-        let path = "users/\(userID)/lists/\(listID)"
+        guard let email = Auth.auth().currentUser?.email else {
+            return Fail(error: NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Usuario no autenticado"])).eraseToAnyPublisher()
+        }
+
+        let docRef = db.document("lists/\(listID)")
+
         return Future { promise in
-            self.db.document(path).delete { error in
+            docRef.getDocument { document, error in
                 if let error = error {
                     return promise(.failure(error))
                 }
-                promise(.success(()))
+                guard let data = document?.data(),
+                      var shared = data["sharedWith"] as? [String] else {
+                    return promise(.failure(NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "Lista no encontrada o corrupta"])))
+                }
+
+                shared.removeAll { $0 == email }
+
+                if shared.isEmpty {
+                    docRef.delete { error in
+                        if let error = error {
+                            return promise(.failure(error))
+                        }
+                        promise(.success(()))
+                    }
+                } else {
+                    docRef.updateData(["sharedWith": shared]) { error in
+                        if let error = error {
+                            return promise(.failure(error))
+                        }
+                        promise(.success(()))
+                    }
+                }
             }
         }
         .eraseToAnyPublisher()

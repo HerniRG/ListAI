@@ -1,7 +1,9 @@
 import Foundation
 import Combine
+import FirebaseFirestore
 
 final class HomeViewModel: ObservableObject {
+    private var listListener: ListenerRegistration?
     
     @Published var activeList: ShoppingListModel? {
         didSet {
@@ -13,7 +15,7 @@ final class HomeViewModel: ObservableObject {
         }
     }
     @Published var lists: [ShoppingListModel] = []
-    @Published var selectedContextForNewList: IAContext = .receta
+    @Published var selectedContextForNewList: IAContext = .evento
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
     @Published var products: [ProductModel] = []
@@ -27,11 +29,15 @@ final class HomeViewModel: ObservableObject {
     @Published var editDuplicateDetected: Bool = false
     @Published var analysis: AnalysisResult? = nil
     @Published var isAnalyzing: Bool = false
+    @Published var isShowingShareSheet = false
+    @Published var listIDToShare: String?
+
     
     private let listUseCase: ListUseCaseProtocol
     private let productUseCase: ProductUseCaseProtocol
     private let iaUseCase: IAUseCaseProtocol
     private let session: SessionManager
+    private let authUseCase: AuthUseCaseProtocol
     private var cancellables = Set<AnyCancellable>()
     
     private func isDuplicate(_ name: String) -> Bool {
@@ -49,11 +55,16 @@ final class HomeViewModel: ObservableObject {
         }
     }
     
-    init(listUseCase: ListUseCaseProtocol, productUseCase: ProductUseCaseProtocol, iaUseCase: IAUseCaseProtocol, session: SessionManager) {
+    init(listUseCase: ListUseCaseProtocol,
+         productUseCase: ProductUseCaseProtocol,
+         iaUseCase: IAUseCaseProtocol,
+         session: SessionManager,
+         authUseCase: AuthUseCaseProtocol) {
         self.listUseCase = listUseCase
         self.productUseCase = productUseCase
         self.iaUseCase = iaUseCase
         self.session = session
+        self.authUseCase = authUseCase
         loadLists()
     }
     
@@ -383,12 +394,11 @@ final class HomeViewModel: ObservableObject {
         }
         .store(in: &cancellables)
     }
-    
-    
-    func deleteCurrentList() {
-        guard let userID = session.userID,
-              let list = activeList else { return }
-        guard let listID = list.id else { return }
+
+    /// Elimina o abandona una lista concreta según el número de usuarios que la comparten.
+    /// - Parameter listID: Identificador de la lista a eliminar/salir.
+    func deleteList(listID: String) {
+        guard let userID = session.userID else { return }
 
         listUseCase.deleteList(for: userID, listID: listID)
             .receive(on: DispatchQueue.main)
@@ -397,10 +407,40 @@ final class HomeViewModel: ObservableObject {
                     self?.errorMessage = error.localizedDescription
                 }
             } receiveValue: { [weak self] in
-                self?.lists.removeAll { $0.id == list.id }
-                self?.products = []
-                self?.activeList = self?.lists.first
-                // If selection needs to be handled, do it in the View, not here.
+                // Actualizamos el estado local
+                self?.lists.removeAll { $0.id == listID }
+                if self?.activeList?.id == listID {
+                    self?.products = []
+                    self?.activeList = self?.lists.first
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    // MARK: - Compartir lista
+    /// Abre el sheet de compartir y guarda la lista que se va a compartir
+    func presentShareSheet(for list: ShoppingListModel) {
+        listIDToShare = list.id                    // guardamos el ID
+        isShowingShareSheet = true                 // activamos el sheet
+    }
+
+    /// Envía la invitación a compartir la lista con el email indicado.
+    /// Cierra el sheet al terminar (éxito o error).
+    func shareActiveList(withEmail email: String) {
+        // Usa el ID guardado; si por algún motivo es nulo, intenta el de activeList
+        guard let listID = listIDToShare ?? activeList?.id else { return }
+        
+        listUseCase.shareList(listID: listID, withEmail: email)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = "Error al compartir la lista: \(error.localizedDescription)"
+                }
+                self?.isShowingShareSheet = false   // cierre del sheet en cualquier caso
+                self?.listIDToShare = nil           // limpia el estado
+            } receiveValue: { [weak self] in
+                self?.isShowingShareSheet = false
+                self?.listIDToShare = nil
             }
             .store(in: &cancellables)
     }
@@ -450,5 +490,39 @@ final class HomeViewModel: ObservableObject {
                 self.analysis = filteredResult
             }
             .store(in: &cancellables)
+    }
+}
+
+// MARK: - Firestore Real-time Listeners
+extension HomeViewModel {
+    func startListeningToLists() {
+        guard let email = authUseCase.getCurrentUserEmail() else {
+            errorMessage = "Correo de usuario no disponible"
+            return
+        }
+
+        isLoading = true
+        listListener = Firestore.firestore()
+            .collection("lists")
+            .whereField("sharedWith", arrayContains: email)
+            .addSnapshotListener { [weak self] snapshot, error in
+                DispatchQueue.main.async {
+                    self?.isLoading = false
+                    if let error = error {
+                        self?.errorMessage = "Error al escuchar listas: \(error.localizedDescription)"
+                        return
+                    }
+                    let docs = snapshot?.documents ?? []
+                    self?.lists = docs.compactMap { try? $0.data(as: ShoppingListModel.self) }
+                    if self?.activeList == nil {
+                        self?.activeList = self?.lists.first
+                    }
+                }
+            }
+    }
+
+    func stopListeningToLists() {
+        listListener?.remove()
+        listListener = nil
     }
 }
