@@ -12,27 +12,55 @@ struct ProfileView: View {
         NavigationView {
             List {
                 Section(header: Text("Información")) {
-                    HStack {
-                        Image(systemName: "envelope.fill")
-                            .foregroundColor(.blue)
+                    Label {
                         Text(viewModel.userEmail)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.primary)
+                    } icon: {
+                        Image(systemName: "envelope.fill")
+                            .foregroundColor(.accentColor)
                     }
-                    .padding(.vertical, 2)
+                }
+                
+                Section(header: Text("Listas compartidas")) {
+                    if viewModel.sharedLists.isEmpty {
+                        Text("No tienes ninguna lista compartida")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(viewModel.sharedLists) { list in
+                            Label {
+                                Text(list.nombre)
+                                    .foregroundColor(.primary)
+                            } icon: {
+                                Image(systemName: "list.bullet")
+                                    .foregroundColor(.accentColor)
+                            }
+                            .padding(.vertical, 2)
+                        }
+                    }
                 }
 
                 Section(header: Text("Cuenta")) {
                     Button {
                         confirmingPasswordReset = true
                     } label: {
-                        Label("Cambiar contraseña", systemImage: "key.fill")
-                            .foregroundColor(.primary)
+                        Label {
+                            Text("Cambiar contraseña")
+                                .foregroundColor(.primary)
+                        } icon: {
+                            Image(systemName: "key.fill")
+                                .foregroundColor(.accentColor)
+                        }
                     }
                     Button(role: .destructive) {
                         confirmingLogout = true
                     } label: {
-                        Label("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.primary)
+                        Label {
+                            Text("Cerrar sesión")
+                                .foregroundColor(.primary)
+                        } icon: {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .foregroundColor(.accentColor)
+                        }
                     }
                 }
 
