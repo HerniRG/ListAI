@@ -7,6 +7,8 @@ final class RegisterViewModel: ObservableObject {
     @Published var email: String = ""
     @Published var password: String = ""
     @Published var confirmPassword: String = ""
+    @Published var isPasswordVisible: Bool = false
+    @Published var isConfirmPasswordVisible: Bool = false
     
     // Estado
     @Published var isLoading: Bool = false

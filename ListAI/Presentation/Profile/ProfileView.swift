@@ -3,6 +3,8 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject var viewModel: ProfileViewModel
     @EnvironmentObject var session: SessionManager
+    @EnvironmentObject var homeViewModel: HomeViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var showSuccessAlert = false
     @State private var confirmingDeletion = false
     @State private var confirmingLogout = false
@@ -27,14 +29,25 @@ struct ProfileView: View {
                             .foregroundColor(.secondary)
                     } else {
                         ForEach(viewModel.sharedLists) { list in
-                            Label {
-                                Text(list.nombre)
-                                    .foregroundColor(.primary)
-                            } icon: {
-                                Image(systemName: "list.bullet")
-                                    .foregroundColor(.accentColor)
+                            Button {
+                                if let index = homeViewModel.lists.firstIndex(where: { $0.id == list.id }) {
+                                    homeViewModel.activeList = list
+                                    homeViewModel.selectedPageIndex = index
+                                    dismiss()
+                                    Haptic.light()
+                                }
+                            } label: {
+                                HStack {
+                                    Text(list.nombre)
+                                        .font(.body)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundColor(.secondary)
+                                        .imageScale(.small)
+                                }
                             }
-                            .padding(.vertical, 2)
+                            .buttonStyle(.plain)
                         }
                     }
                 }

@@ -6,6 +6,7 @@ final class LoginViewModel: ObservableObject {
     // Entrada del usuario
     @Published var email: String = ""
     @Published var password: String = ""
+    @Published var isPasswordVisible: Bool = false
     
     // Estado de carga y errores
     @Published var isLoading: Bool = false

@@ -33,6 +33,7 @@ final class HomeViewModel: ObservableObject {
     @Published var isAnalyzing: Bool = false
     @Published var isShowingShareSheet = false
     @Published var listIDToShare: String?
+    @Published var selectedPageIndex: Int = 0
 
     
     private let listUseCase: ListUseCaseProtocol
@@ -97,6 +98,7 @@ extension HomeViewModel {
                 }
             } receiveValue: { [weak self] lists in
                 self?.lists = lists
+                self?.selectedPageIndex = 0
                 self?.activeList = lists.first      // didSet se encargará de cargar los productos
             }
             .store(in: &cancellables)
@@ -169,6 +171,7 @@ extension HomeViewModel {
                     self?.products = []
                     self?.activeList = self?.lists.first
                 }
+                self?.selectedPageIndex = 0
             }
             .store(in: &cancellables)
     }
@@ -248,7 +251,7 @@ extension HomeViewModel {
                 if case let .failure(error) = completion {
                     self?.errorMessage = error.localizedDescription
                 }
-            } receiveValue: { [weak self] in
+            } receiveValue: { _ in
             }
             .store(in: &cancellables)
     }
@@ -319,7 +322,7 @@ extension HomeViewModel {
 
         guard let userID = session.userID, let listID = activeList?.id else { return }
 
-        for (index, product) in products.enumerated() {
+        for (index, _) in products.enumerated() {
             products[index].orden = index
         }
 
@@ -346,7 +349,7 @@ extension HomeViewModel {
                 if case let .failure(error) = completion {
                     self?.errorMessage = error.localizedDescription
                 }
-            } receiveValue: { [weak self] in
+            } receiveValue: { _ in
             }
             .store(in: &cancellables)
     }

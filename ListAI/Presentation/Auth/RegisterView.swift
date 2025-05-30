@@ -5,38 +5,98 @@ struct RegisterView: View {
     let toggleForm: () -> Void
     
     var body: some View {
-        VStack(spacing: 20) {
-            Text("Crear Cuenta")
-                .font(.largeTitle.bold())
+        ZStack {
+            Color(.systemGroupedBackground)
+                .ignoresSafeArea()
             
-            TextField("Correo", text: $viewModel.email)
-                .textContentType(.emailAddress)
-                .keyboardType(.emailAddress)
-                .textFieldStyle(.roundedBorder)
-            
-            SecureField("Contraseña", text: $viewModel.password)
-                .textFieldStyle(.roundedBorder)
-            
-            SecureField("Confirmar Contraseña", text: $viewModel.confirmPassword)
-                .textFieldStyle(.roundedBorder)
-            
-            if let error = viewModel.errorMessage {
-                Text(error).foregroundColor(.red)
-            }
-            
-            if viewModel.isLoading {
-                ProgressView()
-            } else {
-                Button("Registrarse") {
-                    viewModel.register()
+            VStack {
+                Spacer()
+                
+                VStack(spacing: 20) {
+                    Text("Crear Cuenta")
+                        .font(.largeTitle.bold())
+                    
+                    TextField("Correo", text: $viewModel.email)
+                        .textContentType(.emailAddress)
+                        .keyboardType(.emailAddress)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .textFieldStyle(.roundedBorder)
+
+                    HStack {
+                        if viewModel.isPasswordVisible {
+                            TextField("Contraseña", text: $viewModel.password)
+                                .textFieldStyle(.roundedBorder)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                        } else {
+                            SecureField("Contraseña", text: $viewModel.password)
+                                .textFieldStyle(.roundedBorder)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                        }
+                        Button(action: {
+                            viewModel.isPasswordVisible.toggle()
+                        }) {
+                            Image(systemName: viewModel.isPasswordVisible ? "eye.slash.fill" : "eye.fill")
+                                .foregroundColor(.gray)
+                        }
+                    }
+
+                    HStack {
+                        if viewModel.isConfirmPasswordVisible {
+                            TextField("Confirmar Contraseña", text: $viewModel.confirmPassword)
+                                .textFieldStyle(.roundedBorder)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                        } else {
+                            SecureField("Confirmar Contraseña", text: $viewModel.confirmPassword)
+                                .textFieldStyle(.roundedBorder)
+                                .autocapitalization(.none)
+                                .disableAutocorrection(true)
+                        }
+                        Button(action: {
+                            viewModel.isConfirmPasswordVisible.toggle()
+                        }) {
+                            Image(systemName: viewModel.isConfirmPasswordVisible ? "eye.slash.fill" : "eye.fill")
+                                .foregroundColor(.gray)
+                        }
+                    }
+
+                    if let error = viewModel.errorMessage {
+                        Text(error)
+                            .foregroundColor(.red)
+                            .font(.callout)
+                            .multilineTextAlignment(.center)
+                            .padding(.top, 4)
+                    }
+
+                    if viewModel.isLoading {
+                        ProgressView()
+                    } else {
+                        Button("Registrarse") {
+                            viewModel.register()
+                        }
+                        .buttonStyle(.borderedProminent)
+                    }
+
+                    Button(action: toggleForm) {
+                        Text("¿Ya tienes cuenta? Inicia sesión")
+                            .font(.footnote)
+                            .foregroundColor(.accentColor)
+                    }
+                    .padding(.top, 8)
                 }
-                .buttonStyle(.borderedProminent)
-            }
-            
-            Button("¿Ya tienes cuenta? Inicia sesión") {
-                toggleForm()
+                .padding()
+                .background(
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(Color(.systemBackground))
+                        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
+                )
+                .padding(.horizontal, 32)
+                
+                Spacer()
             }
         }
-        .padding()
     }
 }
