@@ -3,99 +3,135 @@ import SwiftUI
 struct RegisterView: View {
     @EnvironmentObject var viewModel: RegisterViewModel
     let toggleForm: () -> Void
+    @FocusState private var focusedField: Field?
+    
+    enum Field {
+        case email, password, confirmPassword
+    }
     
     var body: some View {
         ZStack {
             Color(.systemGroupedBackground)
                 .ignoresSafeArea()
+                .onTapGesture {
+                    UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+                }
             
-            VStack {
-                Spacer()
+            VStack(spacing: 20) {
                 
-                VStack(spacing: 20) {
-                    Text("Crear Cuenta")
-                        .font(.largeTitle.bold())
-                    
+                VStack(spacing: 18) {
                     TextField("Correo", text: $viewModel.email)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
                         .autocapitalization(.none)
                         .disableAutocorrection(true)
-                        .textFieldStyle(.roundedBorder)
-
-                    HStack {
-                        if viewModel.isPasswordVisible {
-                            TextField("Contraseña", text: $viewModel.password)
-                                .textFieldStyle(.roundedBorder)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                        } else {
-                            SecureField("Contraseña", text: $viewModel.password)
-                                .textFieldStyle(.roundedBorder)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
+                        .padding(.horizontal, 12)
+                        .frame(height: 44)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.secondary.opacity(0.22), lineWidth: 1.5)
+                        )
+                        .focused($focusedField, equals: .email)
+                        .submitLabel(.next)
+                        .onSubmit {
+                            focusedField = .password
                         }
-                        Button(action: {
-                            viewModel.isPasswordVisible.toggle()
-                        }) {
-                            Image(systemName: viewModel.isPasswordVisible ? "eye.slash.fill" : "eye.fill")
-                                .foregroundColor(.gray)
+                    
+                    SecureField("Contraseña", text: $viewModel.password)
+                        .textContentType(.newPassword)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .padding(.horizontal, 12)
+                        .frame(height: 44)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.secondary.opacity(0.22), lineWidth: 1.5)
+                        )
+                        .focused($focusedField, equals: .password)
+                        .submitLabel(.next)
+                        .onSubmit {
+                            focusedField = .confirmPassword
                         }
-                    }
-
-                    HStack {
-                        if viewModel.isConfirmPasswordVisible {
-                            TextField("Confirmar Contraseña", text: $viewModel.confirmPassword)
-                                .textFieldStyle(.roundedBorder)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                        } else {
-                            SecureField("Confirmar Contraseña", text: $viewModel.confirmPassword)
-                                .textFieldStyle(.roundedBorder)
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                        }
-                        Button(action: {
-                            viewModel.isConfirmPasswordVisible.toggle()
-                        }) {
-                            Image(systemName: viewModel.isConfirmPasswordVisible ? "eye.slash.fill" : "eye.fill")
-                                .foregroundColor(.gray)
-                        }
-                    }
-
-                    if let error = viewModel.errorMessage {
-                        Text(error)
-                            .foregroundColor(.red)
-                            .font(.callout)
-                            .multilineTextAlignment(.center)
-                            .padding(.top, 4)
-                    }
-
-                    if viewModel.isLoading {
-                        ProgressView()
-                    } else {
-                        Button("Registrarse") {
+                    
+                    SecureField("Confirmar contraseña", text: $viewModel.confirmPassword)
+                        .textContentType(.newPassword)
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .padding(.horizontal, 12)
+                        .frame(height: 44)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 10)
+                                .stroke(Color.secondary.opacity(0.22), lineWidth: 1.5)
+                        )
+                        .focused($focusedField, equals: .confirmPassword)
+                        .submitLabel(.go)
+                        .onSubmit {
                             viewModel.register()
                         }
-                        .buttonStyle(.borderedProminent)
-                    }
-
-                    Button(action: toggleForm) {
-                        Text("¿Ya tienes cuenta? Inicia sesión")
-                            .font(.footnote)
-                            .foregroundColor(.accentColor)
-                    }
-                    .padding(.top, 8)
                 }
-                .padding()
-                .background(
-                    RoundedRectangle(cornerRadius: 16, style: .continuous)
-                        .fill(Color(.systemBackground))
-                        .shadow(color: .black.opacity(0.05), radius: 8, x: 0, y: 4)
-                )
-                .padding(.horizontal, 32)
                 
-                Spacer()
+                if viewModel.isLoading {
+                    ProgressView()
+                        .frame(height: 44)
+                        .frame(maxWidth: .infinity)
+                } else {
+                    Button(action: {
+                        withAnimation(.spring(response: 0.32, dampingFraction: 0.6)) {
+                            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                            viewModel.register()
+                        }
+                    }) {
+                        Text("Registrarse")
+                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .frame(maxWidth: .infinity)
+                            .frame(height: 44)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .scaleEffect(viewModel.isLoading ? 0.98 : 1.0)
+                    .animation(.spring(response: 0.32, dampingFraction: 0.6), value: viewModel.isLoading)
+                }
+                
+                if let error = viewModel.errorMessage {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .padding(.horizontal)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(nil)
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage)
+                }
+                
+                Button(action: {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.7)) {
+                        UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                        toggleForm()
+                    }
+                }) {
+                    Text("¿Ya tienes cuenta? Inicia sesión")
+                        .font(.system(size: 15, weight: .regular, design: .rounded))
+                        .foregroundColor(.accentColor)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(Color.clear)
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+                
+            }
+            .padding(.vertical, 28)
+            .padding(.horizontal, 18)
+            .background(
+                RoundedRectangle(cornerRadius: 24, style: .continuous)
+                    .fill(Color(.systemBackground))
+                    .shadow(color: .black.opacity(0.12), radius: 18, x: 0, y: 6)
+            )
+            .padding(.horizontal, 24)
+            .onAppear {
+                focusedField = .email
             }
         }
     }

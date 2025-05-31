@@ -37,7 +37,12 @@ final class RegisterViewModel: ObservableObject {
             .sink { [weak self] completion in
                 self?.isLoading = false
                 if case .failure(let error) = completion {
-                    self?.errorMessage = error.localizedDescription
+                    let errorMessage = error.localizedDescription
+                    if errorMessage.contains("6 characters") || errorMessage.contains("Password should be at least 6 characters") {
+                        self?.errorMessage = "La contraseña debe tener al menos 6 caracteres."
+                    } else {
+                        self?.errorMessage = "No se ha podido registrar. Por favor, revisa los datos e inténtalo de nuevo."
+                    }
                 }
             } receiveValue: { [weak self] userID in
                 self?.session.checkSession()

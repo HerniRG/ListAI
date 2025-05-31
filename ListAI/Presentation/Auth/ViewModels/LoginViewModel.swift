@@ -29,12 +29,21 @@ final class LoginViewModel: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 self?.isLoading = false
-                if case .failure(let error) = completion {
-                    self?.errorMessage = error.localizedDescription
+                if case .failure = completion {
+                    self?.errorMessage = "Credenciales incorrectas. Por favor, revisa el correo y la contraseña."
                 }
             } receiveValue: { [weak self] userID in
                 self?.session.checkSession() // actualiza el estado global
             }
+            .store(in: &cancellables)
+    }
+    
+    func recuperarPassword(email: String) {
+        authUseCase.sendPasswordReset(email: email)
+            .receive(on: DispatchQueue.main)
+            .sink { _ in
+                // En este flujo no hace falta gestionar errores, el feedback ya lo muestra la vista como alert genérico.
+            } receiveValue: { _ in }
             .store(in: &cancellables)
     }
 }
