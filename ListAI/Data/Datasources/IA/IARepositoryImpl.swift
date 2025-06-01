@@ -3,6 +3,26 @@ import Combine
 
 final class IARepositoryImpl: IARepositoryProtocol {
     
+    // MARK: - Context‑specific rules
+    private func rules(for context: IAContext) -> String {
+        switch context {
+        case .receta:
+            return "Devuelve ingredientes genéricos en singular y sin cantidades. Evita marcas comerciales."
+        case .evento:
+            return "Incluye objetos o tareas clave para preparar el evento, sin verbos (ej. 'Globos', 'Piñata', 'Altavoces')."
+        case .compra:
+            return "Lista accesorios, piezas o productos concretos a comprar; un sustantivo por línea."
+        case .proyecto:
+            return "Enumera materiales o hitos necesarios para completar el proyecto."
+        case .viaje:
+            return "Indica objetos esenciales de equipaje y documentos. Sustantivos en singular."
+        case .ideas:
+            return "Propón ideas o conceptos breves (1‑4 palabras) en mayúscula inicial."
+        case .rutina:
+            return "Detalla tareas de mantenimiento o reposición que se repiten periódicamente."
+        }
+    }
+    
     private struct OpenRouterRequest: Encodable {
         let model: String
         let messages: [Message]
@@ -38,22 +58,17 @@ final class IARepositoryImpl: IARepositoryProtocol {
         let systemMessage = OpenRouterRequest.Message(
             role: "system",
             content: contextLine + "\n\n" + """
-Eres **LISTAI**, un asistente que devuelve listas **breves, limpias y prácticas**.
+Eres **LISTAI**, un asistente que genera listas breves, útiles y bien adaptadas al contexto.
 
-### CATEGORÍAS:
-1. **RECETA** → Ingredientes genéricos (sin cantidades ni marcas).
-2. **EVENTO / PROYECTO** → Objetos o tareas necesarias.
-3. **COMPRA** → Componentes o accesorios del producto a comprar.
+### CONTEXTO
+\(rules(for: context))
 
-### INSTRUCCIONES IMPORTANTES
-• Devuelve **solo los ítems**, **uno por línea**.  
-• **No incluyas** saludos, introducciones, aclaraciones ni frases resumen.  
-• **Prohibido** numeración, guiones, viñetas, emojis o signos “:”, “–”, “—”, “¡”, “?”.  
-• Evita verbos como *comprar*, *preparar*, *cortar*, *organizar*, *recordar*, *felicitar*, etc.  
-• Usa **sustantivos simples en singular**: “Globos”, “Piñata”, “Juegos”, “Queso crema”…  
-• Máximo **20 líneas**.  Menos es perfecto.
-
-Responde solo con la lista de ítems.
+### FORMATO DE RESPUESTA
+• Devuelve **solo ítems útiles**, **uno por línea**.  
+• **No incluyas** saludos, introducciones ni explicaciones.  
+• **Evita** símbolos, numeración, guiones, emojis o frases largas.  
+• Usa **sustantivos o frases muy breves** (≤3 palabras), en singular.  
+• **No repitas ítems** y limita la lista a **máximo 20 líneas**.
 """
         )
 
@@ -172,6 +187,10 @@ Responde solo con la lista de ítems.
         // Construir prompt
         let prompt = """
         Eres LISTAI, un asistente experto en organización de listas.
+
+        CONTEXTO: \(context.rawValue)
+        INSTRUCCIONES ESPECÍFICAS:
+        \(rules(for: context))
 
         LISTA: "\(name)"
         TIPO: \(context.rawValue)
