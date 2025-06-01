@@ -30,14 +30,14 @@ struct LoginView: View {
 
             VStack {
 
-                VStack(spacing: 20) {
+                VStack(spacing: 18) {
                     Text("Iniciar Sesión")
-                        .font(.title)
+                        .font(.title2)
                         .fontWeight(.semibold)
                         .padding(.bottom, 10)
                         .accessibilityLabel("Título: Iniciar Sesión")
 
-                    VStack(spacing: 18) {
+                    VStack(spacing: 16) {
                         // Email TextField con borde personalizado y focus
                         TextField("Correo", text: $viewModel.email)
                             .textContentType(.username)
@@ -52,7 +52,7 @@ struct LoginView: View {
                             .padding(.horizontal, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
+                                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
                             )
 
                         // SecureField con .textContentType(.password), borde personalizado y focus
@@ -68,7 +68,7 @@ struct LoginView: View {
                             .padding(.horizontal, 12)
                             .background(
                                 RoundedRectangle(cornerRadius: 10)
-                                    .stroke(Color.gray.opacity(0.3), lineWidth: 1.5)
+                                    .stroke(Color.secondary.opacity(0.3), lineWidth: 1.5)
                             )
                         
                         // Mostrar texto "¿Has olvidado tu contraseña?" solo si el email es válido
@@ -80,7 +80,7 @@ struct LoginView: View {
                             }) {
                                 Text("¿Has olvidado tu contraseña?")
                                     .font(.footnote)
-                                    .foregroundColor(.blue)
+                                    .foregroundColor(Color.accentColor)
                             }
                             .padding(.top, 4)
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
@@ -106,7 +106,7 @@ struct LoginView: View {
                                 }
                             }) {
                                 Text("Entrar")
-                                    .font(.system(size: 18, weight: .semibold, design: .rounded))
+                                    .font(.system(size: 16, weight: .semibold, design: .rounded))
                                     .frame(maxWidth: .infinity)
                                     .frame(height: 44)
                             }
@@ -144,16 +144,16 @@ struct LoginView: View {
                         }
                     }) {
                         Text("¿No tienes cuenta? Regístrate")
-                            .foregroundColor(isRegisterButtonPressed ? Color.blue.opacity(0.7) : Color.blue)
+                            .foregroundColor(isRegisterButtonPressed ? Color.accentColor.opacity(0.7) : Color.accentColor)
                     }
                     .font(.footnote)
-                    .padding(.top, 10)
+                    .padding(.top, 4)
                 }
                 .padding()
                 // Fondo con mayor corner radius y sombra más suave
                 .background(
                     RoundedRectangle(cornerRadius: 24)
-                        .fill(Color.white)
+                        .fill(Color(UIColor.systemBackground))
                         .shadow(color: .black.opacity(0.12), radius: 18, x: 0, y: 6)
                 )
                 .padding(.horizontal, 24)

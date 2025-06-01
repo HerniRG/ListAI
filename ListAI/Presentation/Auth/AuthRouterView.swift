@@ -11,7 +11,8 @@ struct AuthRouterView: View {
             
             VStack(spacing: 4) {
                 Text("Bienvenido a ListAI")
-                    .font(.title).bold()
+                    .font(.largeTitle)
+                    .fontWeight(.heavy)
                     .multilineTextAlignment(.center)
                 Text("Organiza tus listas de forma inteligente")
                     .font(.subheadline)
@@ -40,6 +41,6 @@ struct AuthRouterView: View {
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.85), value: showRegister)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(.systemGroupedBackground).ignoresSafeArea())
+        .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
     }
 }

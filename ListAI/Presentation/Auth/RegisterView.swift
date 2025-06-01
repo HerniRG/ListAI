@@ -11,15 +11,22 @@ struct RegisterView: View {
     
     var body: some View {
         ZStack {
-            Color(.systemGroupedBackground)
+            Color(UIColor.systemGroupedBackground)
                 .ignoresSafeArea()
                 .onTapGesture {
                     UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
                 }
             
-            VStack(spacing: 20) {
+            VStack(spacing: 18) {
                 
-                VStack(spacing: 18) {
+                Text("Registrarse")
+                    .font(.title2)
+                    .fontWeight(.semibold)
+                    .padding(.bottom, 10)
+                    .accessibilityLabel("Título: Registrarse")
+                
+                
+                VStack(spacing: 16) {
                     TextField("Correo", text: $viewModel.email)
                         .textContentType(.emailAddress)
                         .keyboardType(.emailAddress)
@@ -85,7 +92,7 @@ struct RegisterView: View {
                         }
                     }) {
                         Text("Registrarse")
-                            .font(.system(size: 18, weight: .semibold, design: .rounded))
+                            .font(.system(size: 16, weight: .semibold, design: .rounded))
                             .frame(maxWidth: .infinity)
                             .frame(height: 44)
                     }
@@ -101,7 +108,7 @@ struct RegisterView: View {
                         .padding(.horizontal)
                         .multilineTextAlignment(.center)
                         .lineLimit(nil)
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                        .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
                         .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage)
                 }
                 
@@ -112,27 +119,26 @@ struct RegisterView: View {
                     }
                 }) {
                     Text("¿Ya tienes cuenta? Inicia sesión")
-                        .font(.system(size: 15, weight: .regular, design: .rounded))
+                        .font(.footnote)
                         .foregroundColor(.accentColor)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
                         .background(Color.clear)
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 4)
                 
             }
-            .padding(.vertical, 28)
-            .padding(.horizontal, 18)
+            .padding(.horizontal, 24)
+            .padding(.vertical, 18)
             .background(
                 RoundedRectangle(cornerRadius: 24, style: .continuous)
-                    .fill(Color(.systemBackground))
+                    .fill(Color(UIColor.systemBackground))
                     .shadow(color: .black.opacity(0.12), radius: 18, x: 0, y: 6)
             )
-            .padding(.horizontal, 24)
             .onAppear {
                 focusedField = .email
             }
         }
+        .padding(.horizontal, 24)
     }
 }

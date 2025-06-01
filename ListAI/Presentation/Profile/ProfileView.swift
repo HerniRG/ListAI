@@ -9,13 +9,14 @@ struct ProfileView: View {
     @State private var confirmingDeletion = false
     @State private var confirmingLogout = false
     @State private var confirmingPasswordReset = false
+    @State private var fixedUserEmail: String = ""
 
     var body: some View {
         NavigationView {
             List {
                 Section(header: Text("Información")) {
                     Label {
-                        Text(viewModel.userEmail)
+                        Text(fixedUserEmail)
                             .foregroundColor(.primary)
                     } icon: {
                         Image(systemName: "envelope.fill")
@@ -117,7 +118,9 @@ struct ProfileView: View {
             Button("Cancelar", role: .cancel) {}
         }
         .onChange(of: viewModel.successMessage) { _, newValue in
-            if newValue != nil {
+            if newValue == "Sesión cerrada correctamente." {
+                session.signOut()
+            } else if newValue != nil {
                 showSuccessAlert = true
             }
         }
@@ -128,6 +131,11 @@ struct ProfileView: View {
             }
         } message: {
             Text(viewModel.successMessage ?? "")
+        }
+        .onAppear {
+            if fixedUserEmail.isEmpty, viewModel.userEmail != "Sin correo" {
+                fixedUserEmail = viewModel.userEmail
+            }
         }
     }
 }

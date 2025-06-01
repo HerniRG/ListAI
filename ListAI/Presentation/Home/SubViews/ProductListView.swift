@@ -13,7 +13,8 @@ struct ProductListView: View {
     @EnvironmentObject var viewModel: HomeViewModel
 
     var body: some View {
-        VStack(spacing: 0) {
+        Group {
+            VStack(spacing: 0) {
             HStack {
                 Text("📝 \(list.nombre)")
                     .font(.title3)
@@ -52,6 +53,7 @@ struct ProductListView: View {
             }
             .padding(.horizontal, 12)
             .padding(.top, 8)
+            .transition(.opacity.combined(with: .move(edge: .trailing)))
             
             // Barra de progreso que muestra productos comprados y total
             let total = viewModel.products.count
@@ -83,53 +85,60 @@ struct ProductListView: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            .transition(.opacity.combined(with: .move(edge: .trailing)))
 
             // Botón "Eliminar seleccionados" cuando hay productos comprados
-            if viewModel.products.contains(where: { $0.esComprado }) {
-                HStack {
-                    Spacer()
-                    Button(role: .destructive) {
-                        showDeleteSelectedAlert = true
-                    } label: {
-                        Label("Eliminar seleccionados", systemImage: "trash")
-                            .font(.subheadline)
-                    }
-                    .padding(.trailing, 16)
-                    .padding(.vertical, 4)
-                }
-                .transition(.opacity.combined(with: .move(edge: .top)))
-                .animation(.easeInOut(duration: 0.3), value: viewModel.products)
-            }
-
             Group {
-                if viewModel.products.isEmpty {
-                    Spacer()
-                    EmptyListAnimatedView()
-                    Spacer()
-                } else {
-                    List {
-                        ForEach(viewModel.products) { product in
-                            ProductRowView(
-                                product: product,
-                                selectedProductID: $selectedProductID,
-                                showDeleteProductAlert: $showDeleteProductAlert,
-                                editedName: $editedName,
-                            )
+                if viewModel.products.contains(where: { $0.esComprado }) {
+                    HStack {
+                        Spacer()
+                        Button(role: .destructive) {
+                            showDeleteSelectedAlert = true
+                        } label: {
+                            Label("Eliminar seleccionados", systemImage: "trash")
+                                .font(.subheadline)
                         }
-                        .onMove { indices, newOffset in
-                            viewModel.moveProducts(from: indices, to: newOffset)
-                        }
+                        .padding(.trailing, 16)
+                        .padding(.vertical, 4)
                     }
-                    .listStyle(.plain)
-                    .padding(.top, 8)
-                    .padding(.bottom, 4)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.75), value: viewModel.products)
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
-                    .environment(\.editMode, .constant(.active))
                 }
             }
-            .animation(.easeInOut(duration: 0.35), value: viewModel.products)
+            .animation(.easeInOut(duration: 0.3), value: comprados)
+
+                Group {
+                    if viewModel.products.isEmpty {
+                        Spacer()
+                        EmptyListAnimatedView()
+                        Spacer()
+                    } else {
+                        List {
+                            ForEach(viewModel.products) { product in
+                                ProductRowView(
+                                    product: product,
+                                    selectedProductID: $selectedProductID,
+                                    showDeleteProductAlert: $showDeleteProductAlert,
+                                    editedName: $editedName,
+                                )
+                            }
+                            .onMove { indices, newOffset in
+                                viewModel.moveProducts(from: indices, to: newOffset)
+                            }
+                        }
+                        .listStyle(.plain)
+                        .padding(.top, 8)
+                        .padding(.bottom, 4)
+                        .animation(.spring(response: 0.4, dampingFraction: 0.75), value: viewModel.products)
+                        .transition(.opacity.combined(with: .move(edge: .trailing)))
+                        .environment(\.editMode, .constant(.active))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.35), value: viewModel.products)
+            }
         }
+        .id(list.id)
+        .animation(.easeInOut(duration: 0.35), value: list.id)
+        .transition(.opacity.combined(with: .move(edge: .trailing)))
         .padding(.horizontal, 2)
         .frame(maxHeight: .infinity)
         .alert("¿Eliminar los elementos seleccionados?", isPresented: $showDeleteSelectedAlert) {
