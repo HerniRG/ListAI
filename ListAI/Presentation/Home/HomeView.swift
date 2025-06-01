@@ -4,7 +4,6 @@ struct HomeView: View {
     @EnvironmentObject var session: SessionManager
     @EnvironmentObject var viewModel: HomeViewModel
 
-    @State private var selectedPageIndex: Int = 0
     @State private var showAddProductSheet = false
     @State private var showNewListSheet = false
     @State private var showIngredientSheet = false
@@ -55,7 +54,6 @@ struct HomeView: View {
                         .padding(.top, 12)
 
                     ListSelectorView(
-                        selectedPageIndex: $selectedPageIndex,
                         showNewListSheet: { showNewListSheet = true }
                     )
 
@@ -75,8 +73,8 @@ struct HomeView: View {
                             Spacer()
                         } else {
                             ProductListView(
-                                list: viewModel.lists[selectedPageIndex],
-                                selectedPageIndex: $selectedPageIndex,
+                                list: viewModel.lists[viewModel.selectedPageIndex],
+                                selectedPageIndex: $viewModel.selectedPageIndex,
                                 selectedProductID: $selectedProductID,
                                 showDeleteProductAlert: $showDeleteProductAlert,
                                 showDeleteListAlert: $showDeleteListAlert,
@@ -162,13 +160,13 @@ struct HomeView: View {
         .alert("¿Eliminar esta lista?", isPresented: $showDeleteListAlert) {
             Button("Eliminar", role: .destructive) {
                 guard !viewModel.lists.isEmpty else { return }
-                let listID = viewModel.lists[selectedPageIndex].id
+                let listID = viewModel.lists[viewModel.selectedPageIndex].id
                 if let listID {
                     viewModel.deleteList(listID: listID)
                 }
                 withAnimation {
                     if !viewModel.lists.isEmpty {
-                        selectedPageIndex = 0
+                        viewModel.selectedPageIndex = 0
                     }
                 }
             }

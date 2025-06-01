@@ -4,6 +4,7 @@ import FirebaseFirestore
 
 final class HomeViewModel: ObservableObject {
     private var listListener: ListenerRegistration?
+    private var productsListener: ListenerRegistration?
     
     @Published var activeList: ShoppingListModel? {
         didSet {
@@ -12,6 +13,7 @@ final class HomeViewModel: ObservableObject {
                 let userID = session.userID
             else { return }
             loadProducts(userID: userID, listID: listID)
+            startListeningToProducts(listID: listID)
         }
     }
     @Published var lists: [ShoppingListModel] = []
@@ -31,6 +33,7 @@ final class HomeViewModel: ObservableObject {
     @Published var isAnalyzing: Bool = false
     @Published var isShowingShareSheet = false
     @Published var listIDToShare: String?
+    @Published var selectedPageIndex: Int = 0
 
     
     private let listUseCase: ListUseCaseProtocol
@@ -40,21 +43,28 @@ final class HomeViewModel: ObservableObject {
     private let authUseCase: AuthUseCaseProtocol
     private var cancellables = Set<AnyCancellable>()
     
-    private func isDuplicate(_ name: String) -> Bool {
+    // MARK: - Duplicate detection
+    /// Devuelve `true` si `name` ya existe en `products`.
+    /// - Parameter excludingID: Si se pasa, ignora el producto con ese ID (útil para edición).
+    private func isDuplicate(_ name: String, excludingID: String? = nil) -> Bool {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return products.contains {
-            $0.nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == trimmed
-        }
-    }
-
-    private func isDuplicate(_ name: String, excluding productID: String?) -> Bool {
-        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        return products.contains {
-            guard $0.id != productID else { return false }
+            // Si se indica un ID a excluir, lo saltamos
+            if let excludingID = excludingID, $0.id == excludingID { return false }
             return $0.nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == trimmed
         }
     }
     
+    // MARK: - Helpers
+    /// Devuelve el siguiente valor de `orden` para un nuevo producto.
+    /// Si la lista está vacía, será 0; en caso contrario, `max(orden) + 1`.
+    private func nextOrden() -> Int {
+        guard let maxOrden = products.map({ $0.orden ?? 0 }).max() else {
+            return 0
+        }
+        return maxOrden + 1
+    }
+
     init(listUseCase: ListUseCaseProtocol,
          productUseCase: ProductUseCaseProtocol,
          iaUseCase: IAUseCaseProtocol,
@@ -68,6 +78,10 @@ final class HomeViewModel: ObservableObject {
         loadLists()
     }
     
+}
+
+// MARK: - List Management
+extension HomeViewModel {
     func loadLists() {
         guard let userID = session.userID else {
             errorMessage = "Usuario no encontrado"
@@ -84,11 +98,87 @@ final class HomeViewModel: ObservableObject {
                 }
             } receiveValue: { [weak self] lists in
                 self?.lists = lists
+                self?.selectedPageIndex = 0
                 self?.activeList = lists.first      // didSet se encargará de cargar los productos
             }
             .store(in: &cancellables)
     }
     
+    func createInitialList() {
+        guard let userID = session.userID,
+              !newListName.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return
+        }
+        
+        isLoading = true
+        errorMessage = nil
+        
+        listUseCase.createList(
+            for: userID,
+            name: newListName.trimmingCharacters(in: .whitespaces),
+            context: selectedContextForNewList
+        )
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                self?.isLoading = false
+                if case let .failure(error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            } receiveValue: { [weak self] list in
+                self?.activeList = list          // el listener añadirá la lista al array
+                self?.newListName = ""
+            }
+            .store(in: &cancellables)
+    }
+
+    func addNewList(nombre: String) {
+        guard let userID = session.userID,
+              !nombre.trimmingCharacters(in: .whitespaces).isEmpty else {
+            return
+        }
+        
+        listUseCase.createList(
+            for: userID,
+            name: nombre.trimmingCharacters(in: .whitespaces),
+            context: selectedContextForNewList
+        )
+        .receive(on: DispatchQueue.main)
+        .sink { [weak self] completion in
+            if case let .failure(error) = completion {
+                self?.errorMessage = error.localizedDescription
+            }
+        } receiveValue: { [weak self] newList in
+            self?.activeList = newList           // el listener añadirá la lista al array
+        }
+        .store(in: &cancellables)
+    }
+
+    /// Elimina o abandona una lista concreta según el número de usuarios que la comparten.
+    /// - Parameter listID: Identificador de la lista a eliminar/salir.
+    func deleteList(listID: String) {
+        guard let userID = session.userID else { return }
+
+        listUseCase.deleteList(for: userID, listID: listID)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            } receiveValue: { [weak self] in
+                // Actualizamos el estado local
+                self?.lists.removeAll { $0.id == listID }
+                if self?.activeList?.id == listID {
+                    self?.products = []
+                    self?.activeList = self?.lists.first
+                }
+                self?.selectedPageIndex = 0
+            }
+            .store(in: &cancellables)
+    }
+}
+
+// MARK: - Product Management
+extension HomeViewModel {
     private func loadProducts(userID: String, listID: String) {
         productUseCase.getProducts(userID: userID, listID: listID)
             .receive(on: DispatchQueue.main)
@@ -101,21 +191,16 @@ final class HomeViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
+
     func addProductManually() {
         guard let userID = session.userID,
               let listID = activeList?.id,
               !newProductName.trimmingCharacters(in: .whitespaces).isEmpty else {
             return
         }
-        
-        let nextOrden: Int
-        if products.isEmpty {
-            nextOrden = 0
-        } else {
-            nextOrden = (products.map { $0.orden ?? 0 }.max() ?? (products.count - 1)) + 1
-        }
-        
+
+        let nextOrden = nextOrden()
+
         let newProduct = ProductModel(
             id: UUID().uuidString,
             orden: nextOrden,
@@ -124,7 +209,7 @@ final class HomeViewModel: ObservableObject {
             añadidoPorIA: false,
             ingredientesDe: nil
         )
-        
+
         productUseCase.addProduct(userID: userID, listID: listID, product: newProduct)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
@@ -132,12 +217,11 @@ final class HomeViewModel: ObservableObject {
                     self?.errorMessage = error.localizedDescription
                 }
             } receiveValue: { [weak self] in
-                self?.products.append(newProduct)
                 self?.newProductName = ""
             }
             .store(in: &cancellables)
     }
-    
+
     func addProduct(named name: String) {
         guard let userID = session.userID,
               let listID = activeList?.id,
@@ -150,12 +234,7 @@ final class HomeViewModel: ObservableObject {
             return
         }
 
-        let nextOrden: Int
-        if products.isEmpty {
-            nextOrden = 0
-        } else {
-            nextOrden = (products.map { $0.orden ?? 0 }.max() ?? (products.count - 1)) + 1
-        }
+        let nextOrden = nextOrden()
 
         let newProduct = ProductModel(
             id: UUID().uuidString,
@@ -172,12 +251,11 @@ final class HomeViewModel: ObservableObject {
                 if case let .failure(error) = completion {
                     self?.errorMessage = error.localizedDescription
                 }
-            } receiveValue: { [weak self] in
-                self?.products.append(newProduct)
+            } receiveValue: { _ in
             }
             .store(in: &cancellables)
     }
-    
+
     func toggleComprado(for product: ProductModel) {
         guard let userID = session.userID,
               let listID = activeList?.id,
@@ -198,7 +276,87 @@ final class HomeViewModel: ObservableObject {
             } receiveValue: { _ in }
             .store(in: &cancellables)
     }
-    
+
+    func deleteProduct(_ product: ProductModel) {
+        guard let userID = session.userID,
+              let listID = activeList?.id,
+              let productID = product.id else { return }
+        
+        productUseCase.deleteProduct(userID: userID, listID: listID, productID: productID)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            } receiveValue: { [weak self] in
+                self?.products.removeAll { $0.id == productID }
+            }
+            .store(in: &cancellables)
+    }
+
+    func editProduct(_ product: ProductModel) {
+        guard let userID = session.userID,
+              let listID = activeList?.id else { return }
+
+        if isDuplicate(product.nombre, excludingID: product.id) {
+            editDuplicateDetected = true
+            return
+        }
+
+        productUseCase.updateProduct(userID: userID, listID: listID, product: product)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            } receiveValue: { [weak self] in
+                guard let index = self?.products.firstIndex(where: { $0.id == product.id }) else { return }
+                self?.products[index] = product
+                self?.editingProduct = nil
+            }
+            .store(in: &cancellables)
+    }
+
+    func moveProducts(from source: IndexSet, to destination: Int) {
+        products.move(fromOffsets: source, toOffset: destination)
+
+        guard let userID = session.userID, let listID = activeList?.id else { return }
+
+        for (index, _) in products.enumerated() {
+            products[index].orden = index
+        }
+
+        productUseCase.updateProductOrdenes(userID: userID, listID: listID, products: products)
+            .sink(receiveCompletion: { _ in }, receiveValue: { })
+            .store(in: &cancellables)
+    }
+
+    func addIngredientManually(_ nombre: String, from plato: String) {
+        guard let userID = session.userID,
+              let listID = activeList?.id else { return }
+        
+        let product = ProductModel(
+            id: UUID().uuidString,
+            nombre: nombre,
+            esComprado: false,
+            añadidoPorIA: true,
+            ingredientesDe: plato
+        )
+        
+        productUseCase.addProduct(userID: userID, listID: listID, product: product)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = error.localizedDescription
+                }
+            } receiveValue: { _ in
+            }
+            .store(in: &cancellables)
+    }
+}
+
+// MARK: - IA Features
+extension HomeViewModel {
     func useIAForProductName() {
         guard let userID = session.userID,
               let listID = activeList?.id,
@@ -222,7 +380,7 @@ final class HomeViewModel: ObservableObject {
                 }
             } receiveValue: { [weak self] ingredients in
                 guard let self = self else { return }
-                let baseOrden = self.products.isEmpty ? 0 : (self.products.map { $0.orden ?? 0 }.max() ?? (self.products.count - 1)) + 1
+                let baseOrden = self.nextOrden()
 
                 let filtered = ingredients.filter { !self.isDuplicate($0) }
                 self.ignoredDuplicateNames = ingredients.filter { self.isDuplicate($0) }
@@ -244,12 +402,11 @@ final class HomeViewModel: ObservableObject {
                         .store(in: &self.cancellables)
                 }
                 
-                self.products.append(contentsOf: newProducts)
                 self.newProductName = ""
             }
             .store(in: &cancellables)
     }
-    
+
     func fetchIngredients(for dish: String,
                           context: IAContext,
                           completion: @escaping ([String]) -> Void) {
@@ -278,190 +435,7 @@ final class HomeViewModel: ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
-    func addIngredientManually(_ nombre: String, from plato: String) {
-        guard let userID = session.userID,
-              let listID = activeList?.id else { return }
-        
-        let product = ProductModel(
-            id: UUID().uuidString,
-            nombre: nombre,
-            esComprado: false,
-            añadidoPorIA: true,
-            ingredientesDe: plato
-        )
-        
-        productUseCase.addProduct(userID: userID, listID: listID, product: product)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                if case let .failure(error) = completion {
-                    self?.errorMessage = error.localizedDescription
-                }
-            } receiveValue: { [weak self] in
-                self?.products.append(product)
-            }
-            .store(in: &cancellables)
-    }
-    
-    func createInitialList() {
-        guard let userID = session.userID,
-              !newListName.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return
-        }
-        
-        isLoading = true
-        errorMessage = nil
-        
-        listUseCase.createList(
-            for: userID,
-            name: newListName.trimmingCharacters(in: .whitespaces),
-            context: selectedContextForNewList
-        )
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                self?.isLoading = false
-                if case let .failure(error) = completion {
-                    self?.errorMessage = error.localizedDescription
-                }
-            } receiveValue: { [weak self] list in
-                self?.lists.append(list)
-                self?.activeList = list
-                self?.newListName = ""
-                self?.loadProducts(userID: userID, listID: list.id ?? "")
-            }
-            .store(in: &cancellables)
-    }
-    func deleteProduct(_ product: ProductModel) {
-        guard let userID = session.userID,
-              let listID = activeList?.id,
-              let productID = product.id else { return }
-        
-        productUseCase.deleteProduct(userID: userID, listID: listID, productID: productID)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                if case let .failure(error) = completion {
-                    self?.errorMessage = error.localizedDescription
-                }
-            } receiveValue: { [weak self] in
-                self?.products.removeAll { $0.id == productID }
-            }
-            .store(in: &cancellables)
-    }
-    
-    func editProduct(_ product: ProductModel) {
-        guard let userID = session.userID,
-              let listID = activeList?.id else { return }
 
-        if isDuplicate(product.nombre, excluding: product.id) {
-            editDuplicateDetected = true
-            return
-        }
-
-        productUseCase.updateProduct(userID: userID, listID: listID, product: product)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                if case let .failure(error) = completion {
-                    self?.errorMessage = error.localizedDescription
-                }
-            } receiveValue: { [weak self] in
-                guard let index = self?.products.firstIndex(where: { $0.id == product.id }) else { return }
-                self?.products[index] = product
-                self?.editingProduct = nil
-            }
-            .store(in: &cancellables)
-    }
-    
-    // Permite añadir listas nuevas en cualquier momento reutilizando listUseCase.createList
-    func addNewList(nombre: String) {
-        guard let userID = session.userID,
-              !nombre.trimmingCharacters(in: .whitespaces).isEmpty else {
-            return
-        }
-        
-        listUseCase.createList(
-            for: userID,
-            name: nombre.trimmingCharacters(in: .whitespaces),
-            context: selectedContextForNewList
-        )
-        .receive(on: DispatchQueue.main)
-        .sink { [weak self] completion in
-            if case let .failure(error) = completion {
-                self?.errorMessage = error.localizedDescription
-            }
-        } receiveValue: { [weak self] newList in
-            self?.lists.append(newList)
-            self?.activeList = newList
-        }
-        .store(in: &cancellables)
-    }
-
-    /// Elimina o abandona una lista concreta según el número de usuarios que la comparten.
-    /// - Parameter listID: Identificador de la lista a eliminar/salir.
-    func deleteList(listID: String) {
-        guard let userID = session.userID else { return }
-
-        listUseCase.deleteList(for: userID, listID: listID)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                if case let .failure(error) = completion {
-                    self?.errorMessage = error.localizedDescription
-                }
-            } receiveValue: { [weak self] in
-                // Actualizamos el estado local
-                self?.lists.removeAll { $0.id == listID }
-                if self?.activeList?.id == listID {
-                    self?.products = []
-                    self?.activeList = self?.lists.first
-                }
-            }
-            .store(in: &cancellables)
-    }
-
-    // MARK: - Compartir lista
-    /// Abre el sheet de compartir y guarda la lista que se va a compartir
-    func presentShareSheet(for list: ShoppingListModel) {
-        listIDToShare = list.id                    // guardamos el ID
-        isShowingShareSheet = true                 // activamos el sheet
-    }
-
-    /// Envía la invitación a compartir la lista con el email indicado.
-    /// Cierra el sheet al terminar (éxito o error).
-    func shareActiveList(withEmail email: String) {
-        // Usa el ID guardado; si por algún motivo es nulo, intenta el de activeList
-        guard let listID = listIDToShare ?? activeList?.id else { return }
-        
-        listUseCase.shareList(listID: listID, withEmail: email)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                if case let .failure(error) = completion {
-                    self?.errorMessage = "Error al compartir la lista: \(error.localizedDescription)"
-                }
-                self?.isShowingShareSheet = false   // cierre del sheet en cualquier caso
-                self?.listIDToShare = nil           // limpia el estado
-            } receiveValue: { [weak self] in
-                self?.isShowingShareSheet = false
-                self?.listIDToShare = nil
-            }
-            .store(in: &cancellables)
-    }
-    
-    func moveProducts(from source: IndexSet, to destination: Int) {
-        _ = source.map { products[$0] }
-        products.move(fromOffsets: source, toOffset: destination)
-
-        guard let userID = session.userID, let listID = activeList?.id else { return }
-
-        // Guardar nuevo orden en Firebase
-        for (index, product) in products.enumerated() {
-            var updatedProduct = product
-            updatedProduct.orden = index
-
-            productUseCase.updateProduct(userID: userID, listID: listID, product: updatedProduct)
-                .sink(receiveCompletion: { _ in }, receiveValue: { })
-                .store(in: &cancellables)
-        }
-    }
-    
     func analyzeActiveList() {
         guard let list = activeList else { return }
         let pending = products.filter { !$0.esComprado }.map { $0.nombre }
@@ -488,6 +462,36 @@ final class HomeViewModel: ObservableObject {
                 var filteredResult = result
                 filteredResult.suggestions = filteredSuggestions
                 self.analysis = filteredResult
+            }
+            .store(in: &cancellables)
+    }
+}
+
+// MARK: - Share Features
+extension HomeViewModel {
+    /// Abre el sheet de compartir y guarda la lista que se va a compartir
+    func presentShareSheet(for list: ShoppingListModel) {
+        listIDToShare = list.id                    // guardamos el ID
+        isShowingShareSheet = true                 // activamos el sheet
+    }
+
+    /// Envía la invitación a compartir la lista con el email indicado.
+    /// Cierra el sheet al terminar (éxito o error).
+    func shareActiveList(withEmail email: String) {
+        // Usa el ID guardado; si por algún motivo es nulo, intenta el de activeList
+        guard let listID = listIDToShare ?? activeList?.id else { return }
+        
+        listUseCase.shareList(listID: listID, withEmail: email)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] completion in
+                if case let .failure(error) = completion {
+                    self?.errorMessage = "Error al compartir la lista: \(error.localizedDescription)"
+                }
+                self?.isShowingShareSheet = false   // cierre del sheet en cualquier caso
+                self?.listIDToShare = nil           // limpia el estado
+            } receiveValue: { [weak self] in
+                self?.isShowingShareSheet = false
+                self?.listIDToShare = nil
             }
             .store(in: &cancellables)
     }
@@ -524,5 +528,38 @@ extension HomeViewModel {
     func stopListeningToLists() {
         listListener?.remove()
         listListener = nil
+    }
+
+    // MARK: - Productos en tiempo real
+    func startListeningToProducts(listID: String) {
+        // Limpia el listener anterior
+        productsListener?.remove()
+
+        productsListener = Firestore.firestore()
+            .collection("lists").document(listID)
+            .collection("products")
+            .order(by: "orden")
+            .addSnapshotListener { [weak self] snapshot, error in
+                guard let self = self else { return }
+                if let error {
+                    DispatchQueue.main.async {
+                        self.errorMessage = "Error al escuchar productos: \(error.localizedDescription)"
+                    }
+                    return
+                }
+
+                let nuevos = snapshot?.documents.compactMap {
+                    try? $0.data(as: ProductModel.self)
+                } ?? []
+
+                DispatchQueue.main.async {
+                    self.products = nuevos
+                }
+            }
+    }
+
+    func stopListeningToProducts() {
+        productsListener?.remove()
+        productsListener = nil
     }
 }

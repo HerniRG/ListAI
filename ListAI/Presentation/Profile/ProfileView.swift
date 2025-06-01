@@ -3,6 +3,8 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject var viewModel: ProfileViewModel
     @EnvironmentObject var session: SessionManager
+    @EnvironmentObject var homeViewModel: HomeViewModel
+    @Environment(\.dismiss) private var dismiss
     @State private var showSuccessAlert = false
     @State private var confirmingDeletion = false
     @State private var confirmingLogout = false
@@ -12,27 +14,66 @@ struct ProfileView: View {
         NavigationView {
             List {
                 Section(header: Text("Información")) {
-                    HStack {
-                        Image(systemName: "envelope.fill")
-                            .foregroundColor(.blue)
+                    Label {
                         Text(viewModel.userEmail)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.primary)
+                    } icon: {
+                        Image(systemName: "envelope.fill")
+                            .foregroundColor(.accentColor)
                     }
-                    .padding(.vertical, 2)
+                }
+                
+                Section(header: Text("Listas compartidas")) {
+                    if viewModel.sharedLists.isEmpty {
+                        Text("No tienes ninguna lista compartida")
+                            .foregroundColor(.secondary)
+                    } else {
+                        ForEach(viewModel.sharedLists) { list in
+                            Button {
+                                if let index = homeViewModel.lists.firstIndex(where: { $0.id == list.id }) {
+                                    homeViewModel.activeList = list
+                                    homeViewModel.selectedPageIndex = index
+                                    dismiss()
+                                    Haptic.light()
+                                }
+                            } label: {
+                                HStack {
+                                    Text(list.nombre)
+                                        .font(.body)
+                                        .foregroundColor(.primary)
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .foregroundColor(.secondary)
+                                        .imageScale(.small)
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
                 }
 
                 Section(header: Text("Cuenta")) {
                     Button {
                         confirmingPasswordReset = true
                     } label: {
-                        Label("Cambiar contraseña", systemImage: "key.fill")
-                            .foregroundColor(.primary)
+                        Label {
+                            Text("Cambiar contraseña")
+                                .foregroundColor(.primary)
+                        } icon: {
+                            Image(systemName: "key.fill")
+                                .foregroundColor(.accentColor)
+                        }
                     }
                     Button(role: .destructive) {
                         confirmingLogout = true
                     } label: {
-                        Label("Cerrar sesión", systemImage: "rectangle.portrait.and.arrow.right")
-                            .foregroundColor(.primary)
+                        Label {
+                            Text("Cerrar sesión")
+                                .foregroundColor(.primary)
+                        } icon: {
+                            Image(systemName: "rectangle.portrait.and.arrow.right")
+                                .foregroundColor(.accentColor)
+                        }
                     }
                 }
 

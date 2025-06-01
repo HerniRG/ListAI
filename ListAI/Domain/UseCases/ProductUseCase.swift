@@ -6,6 +6,7 @@ protocol ProductUseCaseProtocol {
     func addProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
     func updateProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
     func deleteProduct(userID: String, listID: String, productID: String) -> AnyPublisher<Void, Error>
+    func updateProductOrdenes(userID: String, listID: String, products: [ProductModel]) -> AnyPublisher<Void, Error>
 }
 
 final class ProductUseCase: ProductUseCaseProtocol {
@@ -29,5 +30,16 @@ final class ProductUseCase: ProductUseCaseProtocol {
     
     func deleteProduct(userID: String, listID: String, productID: String) -> AnyPublisher<Void, Error> {
         repository.deleteProduct(userID: userID, listID: listID, productID: productID)
+    }
+    
+    func updateProductOrdenes(userID: String, listID: String, products: [ProductModel]) -> AnyPublisher<Void, Error> {
+        let updates = products.map {
+            repository.updateProduct(userID: userID, listID: listID, product: $0)
+        }
+
+        return Publishers.MergeMany(updates)
+            .collect()
+            .map { _ in () }
+            .eraseToAnyPublisher()
     }
 }

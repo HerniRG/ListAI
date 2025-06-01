@@ -2,7 +2,6 @@ import SwiftUI
 
 struct ListSelectorView: View {
     @EnvironmentObject var viewModel: HomeViewModel
-    @Binding var selectedPageIndex: Int
     var showNewListSheet: () -> Void
 
     @Namespace private var chipNamespace
@@ -15,22 +14,22 @@ struct ListSelectorView: View {
                     Spacer().frame(width: 8)
                     ForEach(viewModel.lists.indices, id: \.self) { idx in
                         Button(action: {
-                            selectedPageIndex = idx
+                            viewModel.selectedPageIndex = idx
                             Haptic.light()
                             withAnimation(.spring(response: 0.35, dampingFraction: 0.8)) {
                                 viewModel.activeList = viewModel.lists[idx]
                             }
                         }) {
                             Text(viewModel.lists[idx].nombre)
-                                .fontWeight(selectedPageIndex == idx ? .bold : .regular)
-                                .foregroundColor(selectedPageIndex == idx ? .white : .accentColor)
+                                .fontWeight(viewModel.selectedPageIndex == idx ? .bold : .regular)
+                                .foregroundColor(viewModel.selectedPageIndex == idx ? .white : .accentColor)
                                 .padding(.horizontal, 20)
                                 .padding(.vertical, 8)
                                 .lineLimit(1)
                                 .truncationMode(.tail)
                                 .background(
                                     Group {
-                                        if selectedPageIndex == idx {
+                                        if viewModel.selectedPageIndex == idx {
                                             Capsule()
                                                 .fill(Color.accentColor)
                                                 .matchedGeometryEffect(id: "chip", in: chipNamespace)
@@ -42,7 +41,7 @@ struct ListSelectorView: View {
                                 )
                         }
                         .buttonStyle(.plain)
-                        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: selectedPageIndex)
+                        .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.selectedPageIndex)
                     }
                     Button(action: showNewListSheet) {
                         Image(systemName: "plus.circle.fill")
