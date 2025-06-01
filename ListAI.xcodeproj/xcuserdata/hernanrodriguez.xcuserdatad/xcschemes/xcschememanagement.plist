@@ -2,7 +2,13 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>OPENROUTER_API_KEY</key>
-	<string>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</string>
+	<key>SchemeUserState</key>
+	<dict>
+		<key>ListAI.xcscheme_^#shared#^_</key>
+		<dict>
+			<key>orderHint</key>
+			<integer>0</integer>
+		</dict>
+	</dict>
 </dict>
 </plist>
