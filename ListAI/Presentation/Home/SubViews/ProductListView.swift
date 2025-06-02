@@ -16,9 +16,17 @@ struct ProductListView: View {
         Group {
             VStack(spacing: 0) {
             HStack {
-                Text("📝 \(list.nombre)")
+                Text("\(list.nombre)")
                     .font(.title3)
                     .fontWeight(.bold)
+                // Indicador de lista compartida
+                if let shared = list.sharedWith {
+                    Image(systemName: "person.2.fill")
+                        .foregroundColor(.accentColor)
+                        .opacity(shared.count > 1 ? 1 : 0)
+                        .scaleEffect(shared.count > 1 ? 1 : 0.8)
+                        .animation(.easeInOut(duration: 0.35), value: shared.count)
+                }
                 Spacer()
                 Text("Elementos: \(viewModel.products.count)")
                     .font(.caption)

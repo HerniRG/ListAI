@@ -138,7 +138,7 @@ struct RegisterView: View {
             .onAppear {
                 focusedField = .email
             }
+            .padding(.horizontal, 24)
         }
-        .padding(.horizontal, 24)
     }
 }

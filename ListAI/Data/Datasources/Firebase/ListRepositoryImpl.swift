@@ -30,13 +30,24 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
     func shareList(listID: String, withEmail email: String) -> AnyPublisher<Void, Error> {
         let docRef = db.document("lists/\(listID)")
         return Future { promise in
-            docRef.updateData([
-                "sharedWith": FieldValue.arrayUnion([email])
-            ]) { error in
+            let userQuery = self.db.collection("users").whereField("email", isEqualTo: email).limit(to: 1)
+            userQuery.getDocuments { snapshot, error in
                 if let error = error {
                     return promise(.failure(error))
                 }
-                promise(.success(()))
+
+                guard let documents = snapshot?.documents, !documents.isEmpty else {
+                    return promise(.failure(NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "El usuario no está registrado."])))
+                }
+
+                docRef.updateData([
+                    "sharedWith": FieldValue.arrayUnion([email])
+                ]) { error in
+                    if let error = error {
+                        return promise(.failure(error))
+                    }
+                    promise(.success(()))
+                }
             }
         }
         .eraseToAnyPublisher()
@@ -50,7 +61,6 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
             id: UUID().uuidString,
             nombre: name,
             fechaCreacion: Date(),
-            esFavorita: false,
             sharedWith: [email],
             context: context
         )

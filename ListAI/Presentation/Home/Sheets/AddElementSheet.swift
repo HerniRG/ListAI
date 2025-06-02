@@ -31,21 +31,7 @@ struct AddElementSheet: View {
 
             // Botones alineados
             HStack(spacing: 12) {
-                Button {
-                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
-                        viewModel.addProduct(named: newProductName)
-                    }
-                    if !viewModel.manualDuplicateDetected {
-                        newProductName = ""
-                        isPresented = false
-                    }
-                } label: {
-                    Label("Añadir", systemImage: "plus")
-                        .frame(maxWidth: .infinity, minHeight: 48)
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
-
+                
                 Button {
                     guard let ctx = viewModel.activeList?.context else { return }
 
@@ -83,6 +69,22 @@ struct AddElementSheet: View {
                 .tint(.indigo)
                 .disabled(isFetchingIngredients ||
                           newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
+                
+                Button {
+                    withAnimation(.spring(response: 0.45, dampingFraction: 0.8)) {
+                        viewModel.addProduct(named: newProductName)
+                    }
+                    if !viewModel.manualDuplicateDetected {
+                        newProductName = ""
+                        isPresented = false
+                    }
+                } label: {
+                    Label("Añadir", systemImage: "plus")
+                        .frame(maxWidth: .infinity, minHeight: 48)
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(newProductName.trimmingCharacters(in: .whitespaces).isEmpty)
+
             }
 
             // Texto explicativo IA

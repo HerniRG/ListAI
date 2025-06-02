@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseAuth
+import FirebaseFirestore
 import Combine
 
 final class AuthRepositoryImpl: AuthRepositoryProtocol {
@@ -30,6 +31,15 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
                 }
                 if let uid = result?.user.uid {
                     promise(.success(uid))
+                    let db = Firestore.firestore()
+                    db.collection("users").document(uid).setData([
+                        "email": email,
+                        "createdAt": FieldValue.serverTimestamp()
+                    ]) { error in
+                        if let error = error {
+                            print("⚠️ Error al crear el documento de usuario: \(error.localizedDescription)")
+                        }
+                    }
                 } else {
                     promise(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "No se pudo obtener el ID de usuario."])))
                 }

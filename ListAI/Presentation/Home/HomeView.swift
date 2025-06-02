@@ -131,8 +131,8 @@ struct HomeView: View {
                 .environmentObject(viewModel)
             }
             .sheet(isPresented: $viewModel.isShowingShareSheet) {
-                ShareListSheet(isPresented: $viewModel.isShowingShareSheet) { email in
-                    viewModel.shareActiveList(withEmail: email)
+                ShareListSheet(isPresented: $viewModel.isShowingShareSheet) { email, completion in
+                    viewModel.shareActiveList(withEmail: email, completion: completion)
                 }
             }
             .onAppear {

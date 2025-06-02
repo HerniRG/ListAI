@@ -8,10 +8,14 @@ final class HomeViewModel: ObservableObject {
     
     @Published var activeList: ShoppingListModel? {
         didSet {
+            // Detenemos el listener anterior para evitar actualizaciones de la lista saliente
+            stopListeningToProducts()
+
             guard
                 let listID = activeList?.id,
                 let userID = session.userID
             else { return }
+
             loadProducts(userID: userID, listID: listID)
             startListeningToProducts(listID: listID)
         }
@@ -165,13 +169,19 @@ extension HomeViewModel {
                     self?.errorMessage = error.localizedDescription
                 }
             } receiveValue: { [weak self] in
-                // Actualizamos el estado local
-                self?.lists.removeAll { $0.id == listID }
-                if self?.activeList?.id == listID {
-                    self?.products = []
-                    self?.activeList = self?.lists.first
+                guard let self = self else { return }
+
+                // Quitamos la lista localmente
+                self.lists.removeAll { $0.id == listID }
+
+                // Si era la lista activa, detenemos el listener y limpiamos productos
+                if self.activeList?.id == listID {
+                    self.stopListeningToProducts()
+                    self.products = []
+                    self.activeList = self.lists.first
                 }
-                self?.selectedPageIndex = 0
+
+                self.selectedPageIndex = 0
             }
             .store(in: &cancellables)
     }
@@ -476,22 +486,22 @@ extension HomeViewModel {
     }
 
     /// Envía la invitación a compartir la lista con el email indicado.
-    /// Cierra el sheet al terminar (éxito o error).
-    func shareActiveList(withEmail email: String) {
+    /// El resultado se devuelve por completion.
+    func shareActiveList(withEmail email: String, completion: @escaping (Result<Void, Error>) -> Void) {
         // Usa el ID guardado; si por algún motivo es nulo, intenta el de activeList
         guard let listID = listIDToShare ?? activeList?.id else { return }
         
         listUseCase.shareList(listID: listID, withEmail: email)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                if case let .failure(error) = completion {
-                    self?.errorMessage = "Error al compartir la lista: \(error.localizedDescription)"
+            .sink { completionResult in
+                switch completionResult {
+                case .failure(let error):
+                    completion(.failure(error))
+                case .finished:
+                    break
                 }
-                self?.isShowingShareSheet = false   // cierre del sheet en cualquier caso
-                self?.listIDToShare = nil           // limpia el estado
-            } receiveValue: { [weak self] in
-                self?.isShowingShareSheet = false
-                self?.listIDToShare = nil
+            } receiveValue: { _ in
+                completion(.success(()))
             }
             .store(in: &cancellables)
     }
