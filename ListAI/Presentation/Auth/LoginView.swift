@@ -86,6 +86,19 @@ struct LoginView: View {
                             .transition(.opacity.combined(with: .move(edge: .bottom)))
                         }
 
+                        if viewModel.needsEmailVerification && !viewModel.isLoading {
+                            Button {
+                                viewModel.reenviarEmailVerificacion()
+                                // No feedback
+                            } label: {
+                                Text("Reenviar correo de verificación")
+                                    .font(.footnote)
+                                    .foregroundColor(Color.accentColor)
+                            }
+                            .padding(.top, 4)
+                            .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+
                         if viewModel.isLoading {
                             ProgressView()
                                 .padding()
@@ -116,6 +129,7 @@ struct LoginView: View {
                         }
                     }
                     .animation(.easeInOut(duration: 0.3), value: isValidEmail(viewModel.email))
+                    .animation(.easeInOut(duration: 0.3), value: viewModel.needsEmailVerification)
                     .padding(.horizontal)
 
                     if let error = viewModel.errorMessage {
@@ -123,6 +137,7 @@ struct LoginView: View {
                             .foregroundColor(.red)
                             .font(.caption)
                             .padding(.horizontal)
+                            .multilineTextAlignment(.center)
                             .transition(.move(edge: .top).combined(with: .opacity))
                             .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage)
                             .onAppear {

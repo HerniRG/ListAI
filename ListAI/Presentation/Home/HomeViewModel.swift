@@ -548,9 +548,10 @@ extension HomeViewModel {
         productsListener = Firestore.firestore()
             .collection("lists").document(listID)
             .collection("products")
-            .order(by: "orden")
+            // ⬅️ Eliminamos .order(by: "orden")
             .addSnapshotListener { [weak self] snapshot, error in
                 guard let self = self else { return }
+
                 if let error {
                     DispatchQueue.main.async {
                         self.errorMessage = "Error al escuchar productos: \(error.localizedDescription)"
@@ -562,8 +563,11 @@ extension HomeViewModel {
                     try? $0.data(as: ProductModel.self)
                 } ?? []
 
+                // Ordenamos en memoria: los que no tienen «orden» van al final
+                let ordenados = nuevos.sorted { ($0.orden ?? Int.max) < ($1.orden ?? Int.max) }
+
                 DispatchQueue.main.async {
-                    self.products = nuevos
+                    self.products = ordenados
                 }
             }
     }

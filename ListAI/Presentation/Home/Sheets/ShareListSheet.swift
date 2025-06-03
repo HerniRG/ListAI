@@ -72,6 +72,7 @@ struct ShareListSheet: View {
                 .font(.caption)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.horizontal)
 
             // Botón cancelar (todo el ancho, rojo)

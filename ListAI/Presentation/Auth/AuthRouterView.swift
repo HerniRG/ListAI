@@ -37,10 +37,10 @@ struct AuthRouterView: View {
                                                 removal: .move(edge: .leading).combined(with: .opacity)))
                 }
             }
-            .background(.ultraThinMaterial)
+            .background(Color(.systemGroupedBackground))
         }
         .animation(.spring(response: 0.5, dampingFraction: 0.85), value: showRegister)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color(UIColor.systemGroupedBackground).ignoresSafeArea())
+        .background(Color(.systemGroupedBackground).ignoresSafeArea())
     }
 }

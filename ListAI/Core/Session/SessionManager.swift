@@ -13,9 +13,16 @@ final class SessionManager: ObservableObject {
     
     func checkSession() {
         if let user = Auth.auth().currentUser {
-            self.userID = user.uid
-            self.isLoggedIn = true
+            if user.isEmailVerified {
+                self.userID = user.uid
+                self.isLoggedIn = true
+            } else {
+                try? Auth.auth().signOut()
+                self.userID = nil
+                self.isLoggedIn = false
+            }
         } else {
+            self.userID = nil
             self.isLoggedIn = false
         }
     }

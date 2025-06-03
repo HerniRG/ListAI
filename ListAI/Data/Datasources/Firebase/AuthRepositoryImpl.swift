@@ -13,11 +13,16 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
                 if let error = error {
                     return promise(.failure(error))
                 }
-                if let uid = result?.user.uid {
-                    promise(.success(uid))
-                } else {
-                    promise(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "No se pudo obtener el ID de usuario."])))
+                guard let user = result?.user else {
+                    return promise(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "No se pudo obtener el usuario."])))
                 }
+                
+                if !user.isEmailVerified {
+                    // try? Auth.auth().signOut()
+                    return promise(.failure(NSError(domain: "Auth", code: -2, userInfo: [NSLocalizedDescriptionKey: "Correo no verificado. Por favor, confirma tu cuenta."])))
+                }
+                let uid = user.uid
+                promise(.success(uid))
             }
         }
         .eraseToAnyPublisher()
@@ -29,6 +34,13 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
                 if let error = error {
                     return promise(.failure(error))
                 }
+                result?.user.sendEmailVerification(completion: { error in
+                    if let error = error {
+                        print("⚠️ Error al enviar correo de verificación: \(error.localizedDescription)")
+                    } else {
+                        print("📧 Correo de verificación enviado.")
+                    }
+                })
                 if let uid = result?.user.uid {
                     promise(.success(uid))
                     let db = Firestore.firestore()
@@ -73,6 +85,11 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
                 if let error = error {
                     promise(.failure(error))
                 } else {
+                    do {
+                        try Auth.auth().signOut()
+                    } catch {
+                        print("⚠️ Error al cerrar sesión tras eliminar cuenta: \(error.localizedDescription)")
+                    }
                     promise(.success(()))
                 }
             }
@@ -87,6 +104,23 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
     func sendPasswordReset(email: String) -> AnyPublisher<Void, Error> {
         Future { promise in
             Auth.auth().sendPasswordReset(withEmail: email) { error in
+                if let error = error {
+                    promise(.failure(error))
+                } else {
+                    promise(.success(()))
+                }
+            }
+        }
+        .eraseToAnyPublisher()
+    }
+    
+    func sendVerificationEmail() -> AnyPublisher<Void, Error> {
+        Future { promise in
+            guard let user = Auth.auth().currentUser else {
+                return promise(.failure(NSError(domain: "Auth", code: -1, userInfo: [NSLocalizedDescriptionKey: "No hay usuario autenticado."])))
+            }
+            
+            user.sendEmailVerification { error in
                 if let error = error {
                     promise(.failure(error))
                 } else {

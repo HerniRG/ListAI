@@ -9,4 +9,5 @@ protocol AuthRepositoryProtocol {
     func deleteAccount() -> AnyPublisher<Void, Error>
     func getCurrentUserEmail() -> String?
     func sendPasswordReset(email: String) -> AnyPublisher<Void, Error>
+    func sendVerificationEmail() -> AnyPublisher<Void, Error>
 }

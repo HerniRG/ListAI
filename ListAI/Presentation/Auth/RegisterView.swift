@@ -104,11 +104,12 @@ struct RegisterView: View {
                 if let error = viewModel.errorMessage {
                     Text(error)
                         .font(.caption)
-                        .foregroundColor(.red)
+                        .fontWeight(.bold)
+                        .foregroundColor(viewModel.isSuccessMessage ? .green : .red)
                         .padding(.horizontal)
                         .multilineTextAlignment(.center)
                         .lineLimit(nil)
-                        .transition(.asymmetric(insertion: .move(edge: .top).combined(with: .opacity), removal: .opacity))
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
                         .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage)
                 }
                 

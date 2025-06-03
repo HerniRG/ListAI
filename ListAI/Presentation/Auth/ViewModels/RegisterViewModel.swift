@@ -13,6 +13,7 @@ final class RegisterViewModel: ObservableObject {
     // Estado
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
+    @Published var isSuccessMessage: Bool = false
     
     private let authUseCase: AuthUseCaseProtocol
     private let session: SessionManager
@@ -30,6 +31,7 @@ final class RegisterViewModel: ObservableObject {
         }
         
         errorMessage = nil
+        isSuccessMessage = false
         isLoading = true
         
         authUseCase.register(email: email, password: password)
@@ -43,9 +45,16 @@ final class RegisterViewModel: ObservableObject {
                     } else {
                         self?.errorMessage = "No se ha podido registrar. Por favor, revisa los datos e inténtalo de nuevo."
                     }
+                    self?.isSuccessMessage = false
                 }
             } receiveValue: { [weak self] userID in
-                self?.session.checkSession()
+                self?.authUseCase.sendVerificationEmail()
+                    .receive(on: DispatchQueue.main)
+                    .sink { _ in } receiveValue: { [weak self] in
+                        self?.errorMessage = "Hemos enviado un correo. Revisa tu bandeja antes de iniciar sesión."
+                        self?.isSuccessMessage = true
+                    }
+                    .store(in: &self!.cancellables)
             }
             .store(in: &cancellables)
     }
