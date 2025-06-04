@@ -108,6 +108,7 @@ struct RegisterView: View {
                         .foregroundColor(viewModel.isSuccessMessage ? .green : .red)
                         .padding(.horizontal)
                         .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
                         .lineLimit(nil)
                         .transition(.opacity.combined(with: .move(edge: .bottom)))
                         .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage)

@@ -20,7 +20,13 @@ final class HomeViewModel: ObservableObject {
             startListeningToProducts(listID: listID)
         }
     }
-    @Published var lists: [ShoppingListModel] = []
+    @Published var lists: [ShoppingListModel] = [] {
+        didSet {
+            if selectedPageIndex >= lists.count {
+                selectedPageIndex = max(0, lists.count - 1)
+            }
+        }
+    }
     @Published var selectedContextForNewList: IAContext = .evento
     @Published var isLoading: Bool = false
     @Published var errorMessage: String?
@@ -181,7 +187,7 @@ extension HomeViewModel {
                     self.activeList = self.lists.first
                 }
 
-                self.selectedPageIndex = 0
+                self.selectedPageIndex = min(self.selectedPageIndex, max(0, self.lists.count - 1))
             }
             .store(in: &cancellables)
     }
@@ -527,9 +533,13 @@ extension HomeViewModel {
                         return
                     }
                     let docs = snapshot?.documents ?? []
-                    self?.lists = docs.compactMap { try? $0.data(as: ShoppingListModel.self) }
+                    let nuevasListas = docs.compactMap { try? $0.data(as: ShoppingListModel.self) }
+                    self?.lists = nuevasListas
+
                     if self?.activeList == nil {
-                        self?.activeList = self?.lists.first
+                        self?.activeList = nuevasListas.first
+                    } else if let actual = self?.activeList, let primera = nuevasListas.first, actual.id != primera.id {
+                        self?.activeList = primera
                     }
                 }
             }

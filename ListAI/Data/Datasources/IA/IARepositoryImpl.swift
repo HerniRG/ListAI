@@ -3,6 +3,33 @@ import Combine
 
 final class IARepositoryImpl: IARepositoryProtocol {
     
+    // MARK: - Memoria corta: últimos ítems generados por lista
+    private static var recentItemsByList: [String: [String]] = [:]
+
+    // MARK: - Clasificador muy ligero de intención
+    /// Devuelve un `IAContext` si detecta palabras clave que indiquen otro contexto.
+    /// Si no hay coincidencias claras, devuelve nil y se usará el contexto de la lista.
+    private func inferContext(from text: String) -> IAContext? {
+        let lower = text.lowercased()
+        if lower.contains("receta") || lower.contains("ingrediente") || lower.contains("ingredientes") {
+            return .receta
+        }
+        if lower.contains("viaje") || lower.contains("equipaje") || lower.contains("maleta") {
+            return .viaje
+        }
+        if lower.contains("evento") || lower.contains("cumple") || lower.contains("fiesta") {
+            return .evento
+        }
+        if lower.contains("rutina") || lower.contains("mantenimiento") {
+            return .rutina
+        }
+        if lower.contains("idea") || lower.contains("brainstorm") {
+            return .ideas
+        }
+        // Por defecto nil → se mantiene el contexto original
+        return nil
+    }
+    
     // MARK: - Context‑specific rules
     private func rules(for context: IAContext) -> String {
         switch context {
@@ -38,10 +65,10 @@ final class IARepositoryImpl: IARepositoryProtocol {
                         context: IAContext,
                         listName: String) -> AnyPublisher<[String], Error> {
         let url = URL(string: "https://openrouter.ai/api/v1/chat/completions")!
-        // Lista de modelos gratuitos que probaremos en orden
+        // Lista de modelos gratuitos que probaremos en orden (actualizado)
         var candidateModels = [
-            "meta-llama/llama-3.3-8b-instruct:free", // rápido y disponible (mayo‑25)
-            "nousresearch/nous-capybara-7b:free",     // fallback 1
+            "meta-llama/llama-3.3-70b-instruct:free", // modelo principal actualizado
+            "meta-llama/llama-3.3-8b-instruct:free",  // fallback 1
             "mistralai/mistral-7b-instruct:free"      // fallback 2
         ]
         var request = URLRequest(url: url)
@@ -49,19 +76,28 @@ final class IARepositoryImpl: IARepositoryProtocol {
         request.setValue("Bearer \(APIKeys.openRouterKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        // --- NUEVO: decidir contexto final dinámicamente
+        let inferred = inferContext(from: dish)
+        let finalContext = inferred ?? context
+        
         let contextLine = """
-        CATEGORÍA: \(context.rawValue)
+        CATEGORÍA: \(finalContext.rawValue)
         NOMBRE DE LA LISTA: "\(listName)" → Este nombre aporta información sobre el contenido o el objetivo de la lista. Utilízalo como referencia para generar ítems adecuados.
         Todos los ítems deben estar redactados en español de España, evitando regionalismos latinoamericanos. Por ejemplo, “patatas” en lugar de “papas”, “zumo” en lugar de “jugo”, etc.
         """
+        // Ítems generados recientemente para esta lista → evitar repeticiones
+        let recent = IARepositoryImpl.recentItemsByList[listName] ?? []
+        let recentLine = recent.isEmpty
+            ? ""
+            : "\nEVITA repetir estos ítems: " + recent.joined(separator: ", ")
         // Mensajes para OpenRouter
         let systemMessage = OpenRouterRequest.Message(
             role: "system",
-            content: contextLine + "\n\n" + """
+            content: contextLine + recentLine + "\n\n" + """
 Eres **LISTAI**, un asistente que genera listas breves, útiles y bien adaptadas al contexto.
 
 ### CONTEXTO
-\(rules(for: context))
+\(rules(for: finalContext))
 
 ### FORMATO DE RESPUESTA
 • Devuelve **solo ítems útiles**, **uno por línea**.  
@@ -69,6 +105,18 @@ Eres **LISTAI**, un asistente que genera listas breves, útiles y bien adaptadas
 • **Evita** símbolos, numeración, guiones, emojis o frases largas.  
 • Usa **sustantivos o frases muy breves** (≤3 palabras), en singular.  
 • **No repitas ítems** y limita la lista a **máximo 20 líneas**.
+
+### PENSAMIENTO INTERNO
+Piensa paso a paso para encontrar los ítems óptimos, pero **NO muestres tu razonamiento**; solo devuelve la lista final.
+
+### EJEMPLO
+Entrada: "Tortilla de patatas"
+Respuesta correcta:
+Patatas
+Huevos
+Cebolla
+Aceite de oliva
+Sal
 """
         )
 
@@ -79,12 +127,15 @@ Eres **LISTAI**, un asistente que genera listas breves, útiles y bien adaptadas
             OpenRouterRequest.Message(role: "user", content: userPrompt)
         ]
 
+        // Ajustar temperatura según contexto
+        let dynamicTemp: Double = (finalContext == .ideas ? 0.8 : 0.5)
+
         // Helper que genera el cuerpo con el modelo indicado
         func makeBody(model: String) -> Data? {
             let body = OpenRouterRequest(
                 model: model,
                 messages: messages,
-                temperature: 0.5
+                temperature: dynamicTemp
             )
             return try? JSONEncoder().encode(body)
         }
@@ -156,6 +207,11 @@ Eres **LISTAI**, un asistente que genera listas breves, útiles y bien adaptadas
                                 result.append(item)
                             }
                         }
+                    // Guardar en la memoria corta máximo 30 ítems
+                    var history = IARepositoryImpl.recentItemsByList[listName] ?? []
+                    history.append(contentsOf: ingredientesLimpios)
+                    if history.count > 30 { history = Array(history.suffix(30)) }
+                    IARepositoryImpl.recentItemsByList[listName] = history
                     return ingredientesLimpios
                 }
                 .eraseToAnyPublisher()
@@ -186,42 +242,38 @@ Eres **LISTAI**, un asistente que genera listas breves, útiles y bien adaptadas
 
         // Construir prompt
         let prompt = """
-        Eres LISTAI, un asistente experto en organización de listas.
+Eres **LISTAI**, un asistente experto en organización de listas en español de España.
 
-        CONTEXTO: \(context.rawValue)
-        INSTRUCCIONES ESPECÍFICAS:
-        \(rules(for: context))
+### OBJETIVO
+- Proponer hasta **10 ítems NUEVOS** que no aparezcan en pendientes ni comprados.
+- Incluir **1‑3 consejos breves** para mejorar la lista o la compra.
 
-        LISTA: "\(name)"
-        TIPO: \(context.rawValue)
+### CONTEXTO DE LA LISTA
+• Nombre: "\(name)"
+• Tipo: \(context.rawValue)
+• Pendientes: \(pending.isEmpty ? "—" : pending.joined(separator: ", "))
+• Comprados: \(done.isEmpty ? "—" : done.joined(separator: ", "))
+• Evita duplicar con: \(IARepositoryImpl.recentItemsByList[name]?.joined(separator: ", ") ?? "—")
 
-        PENDIENTES (no repitas ninguno):
-        \(pendientesTexto)
+### REGLAS SEGÚN TIPO
+\(rules(for: context))
 
-        COMPRADOS (no repitas ninguno):
-        \(compradosTexto)
+### FORMATO DE RESPUESTA
+SUGERENCIAS:
+<máx 10 ítems, uno por línea, sin guiones, sin numeración>
 
-        Redacta todo en español de España, evitando regionalismos como “papas” o “jugo”.
+CONSEJOS:
+<1‑3 frases cortas (≤30 palabras), una por línea, sin guiones>
 
-        INSTRUCCIONES
-        1. Devuelve **máx. 10 ítems NUEVOS** que no aparezcan en pendientes ni comprados, **uno por línea y sin guiones**.
-        2. Después añade **1–2-3 consejos breves** (≤30 palabras cada uno), **uno por línea y sin guiones**.
-
-        FORMATO EXACTO:
-        SUGERENCIAS:
-        […]
-
-        CONSEJOS:
-        […]
-
-        Añade ítems útiles y redactados en español de España. No repitas ítems. Sigue estrictamente el formato solicitado.
-        """
+### PENSAMIENTO INTERNO
+Piensa paso a paso, pero **no muestres tu razonamiento**; entrega solo la respuesta final con la estructura exacta indicada.
+"""
 
         let messages = [
             OpenRouterRequest.Message(role: "system", content: prompt)
         ]
 
-        let body = OpenRouterRequest(model: "meta-llama/llama-3.3-8b-instruct:free",
+        let body = OpenRouterRequest(model: "meta-llama/llama-3.3-70b-instruct:free",
                                      messages: messages,
                                      temperature: 0.5)
         request.httpBody = try? JSONEncoder().encode(body)

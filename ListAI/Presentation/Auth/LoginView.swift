@@ -138,6 +138,7 @@ struct LoginView: View {
                             .font(.caption)
                             .padding(.horizontal)
                             .multilineTextAlignment(.center)
+                            .fixedSize(horizontal: false, vertical: true)
                             .transition(.move(edge: .top).combined(with: .opacity))
                             .animation(.easeInOut(duration: 0.3), value: viewModel.errorMessage)
                             .onAppear {
