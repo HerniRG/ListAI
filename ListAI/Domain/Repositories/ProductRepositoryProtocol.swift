@@ -2,8 +2,15 @@ import Foundation
 import Combine
 
 protocol ProductRepositoryProtocol {
-    func getProducts(userID: String, listID: String) -> AnyPublisher<[ProductModel], Error>
-    func addProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
-    func updateProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
-    func deleteProduct(userID: String, listID: String, productID: String) -> AnyPublisher<Void, Error>
+    /// Publisher en tiempo real con los productos de una lista
+    func productsPublisher(listID: String) -> AnyPublisher<[ProductModel], Error>
+
+    /// Añade un nuevo producto
+    func addProduct(listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
+
+    /// Actualiza un producto existente
+    func updateProduct(listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
+
+    /// Elimina un producto
+    func deleteProduct(listID: String, productID: String) -> AnyPublisher<Void, Error>
 }

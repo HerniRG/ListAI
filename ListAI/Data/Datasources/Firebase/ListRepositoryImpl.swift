@@ -2,58 +2,75 @@ import Foundation
 import Combine
 import FirebaseFirestore
 import FirebaseAuth
+// NOTE: Updated to real-time Combine publisher; requires Publishers.FirestoreSnapshot
 
 final class ListRepositoryImpl: ListRepositoryProtocol {
     
     private lazy var db = Firestore.firestore()
     
-    func getAllLists(userID: String) -> AnyPublisher<[ShoppingListModel], Error> {
-        guard let email = Auth.auth().currentUser?.email else {
-            return Fail(error: NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Usuario no autenticado"])).eraseToAnyPublisher()
+    // Publisher en tiempo real para las listas compartidas con el usuario actual
+    func listsPublisher() -> AnyPublisher<[ShoppingListModel], Error> {
+        guard let rawEmail = Auth.auth().currentUser?.email else {
+            return Fail(error: NSError(domain: "", code: 401,
+                                       userInfo: [NSLocalizedDescriptionKey: "Usuario no autenticado"]))
+            .eraseToAnyPublisher()
         }
-        return Future { promise in
-            self.db.collection("lists").whereField("sharedWith", arrayContains: email).getDocuments { snapshot, error in
-                if let error = error {
-                    return promise(.failure(error))
-                }
-                
-                let lists = snapshot?.documents.compactMap { doc -> ShoppingListModel? in
-                    try? doc.data(as: ShoppingListModel.self)
-                } ?? []
-                
-                promise(.success(lists))
+        let email = rawEmail.lowercased()
+
+        let query = db.collection("lists").whereField("sharedWith", arrayContains: email)
+        return Publishers.FirestoreSnapshot(query)
+            .map { snapshot in
+                snapshot.documents.compactMap { try? $0.data(as: ShoppingListModel.self) }
+                    .sorted { $0.fechaCreacion < $1.fechaCreacion }
             }
-        }
-        .eraseToAnyPublisher()
+            .eraseToAnyPublisher()
     }
 
-    func shareList(listID: String, withEmail email: String) -> AnyPublisher<Void, Error> {
+    func shareList(listID: String, withEmail rawEmail: String) -> AnyPublisher<Void, Error> {
+        let email = rawEmail.lowercased()
         let docRef = db.document("lists/\(listID)")
         return Future { promise in
-            let userQuery = self.db.collection("users").whereField("email", isEqualTo: email).limit(to: 1)
-            userQuery.getDocuments { snapshot, error in
+            let userDoc = self.db.collection("users").document(email)
+            userDoc.getDocument { doc, error in
                 if let error = error {
                     return promise(.failure(error))
                 }
 
-                guard let documents = snapshot?.documents, !documents.isEmpty else {
-                    return promise(.failure(NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "El usuario no está registrado."])))
+                if doc == nil || !doc!.exists {
+                    userDoc.setData(["email": email,
+                                     "createdAt": FieldValue.serverTimestamp()]) { err in
+                        if let err { print("⚠️ No se pudo crear user stub:", err) }
+                    }
                 }
 
-                docRef.updateData([
-                    "sharedWith": FieldValue.arrayUnion([email])
-                ]) { error in
+                docRef.getDocument { snapshot, error in
                     if let error = error {
                         return promise(.failure(error))
                     }
-                    promise(.success(()))
+
+                    guard let sharedWith = snapshot?.get("sharedWith") as? [String] else {
+                        return promise(.failure(NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "No se pudo obtener la lista."])))
+                    }
+
+                    if sharedWith.contains(email) {
+                        return promise(.success(())) // Ya compartido, no hace falta actualizar
+                    }
+
+                    docRef.updateData([
+                        "sharedWith": FieldValue.arrayUnion([email])
+                    ]) { error in
+                        if let error = error {
+                            return promise(.failure(error))
+                        }
+                        promise(.success(()))
+                    }
                 }
             }
         }
         .eraseToAnyPublisher()
     }
     
-    func createList(userID: String, name: String, context: IAContext) -> AnyPublisher<ShoppingListModel, Error> {
+    func createList(name: String, context: IAContext) -> AnyPublisher<ShoppingListModel, Error> {
         guard let email = Auth.auth().currentUser?.email else {
             return Fail(error: NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Usuario no autenticado"])).eraseToAnyPublisher()
         }
@@ -61,7 +78,7 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
             id: UUID().uuidString,
             nombre: name,
             fechaCreacion: Date(),
-            sharedWith: [email],
+            sharedWith: [email.lowercased()],
             context: context
         )
         
@@ -80,9 +97,11 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
         .eraseToAnyPublisher()
     }
     
-    func deleteList(userID: String, listID: String) -> AnyPublisher<Void, Error> {
+    func deleteList(listID: String) -> AnyPublisher<Void, Error> {
         guard let email = Auth.auth().currentUser?.email else {
-            return Fail(error: NSError(domain: "", code: 401, userInfo: [NSLocalizedDescriptionKey: "Usuario no autenticado"])).eraseToAnyPublisher()
+            return Fail(error: NSError(domain: "", code: 401,
+                                       userInfo: [NSLocalizedDescriptionKey: "Usuario no autenticado"]))
+            .eraseToAnyPublisher()
         }
 
         let docRef = db.document("lists/\(listID)")

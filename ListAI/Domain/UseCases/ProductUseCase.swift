@@ -1,12 +1,22 @@
 import Foundation
 import Combine
+// NOTE: Updated for real-time publishers; removed userID parameter.
 
 protocol ProductUseCaseProtocol {
-    func getProducts(userID: String, listID: String) -> AnyPublisher<[ProductModel], Error>
-    func addProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
-    func updateProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
-    func deleteProduct(userID: String, listID: String, productID: String) -> AnyPublisher<Void, Error>
-    func updateProductOrdenes(userID: String, listID: String, products: [ProductModel]) -> AnyPublisher<Void, Error>
+    /// Publisher en tiempo real con los productos de una lista
+    func productsStream(listID: String) -> AnyPublisher<[ProductModel], Error>
+
+    /// Añade un nuevo producto
+    func addProduct(listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
+
+    /// Actualiza un producto existente
+    func updateProduct(listID: String, product: ProductModel) -> AnyPublisher<Void, Error>
+
+    /// Elimina un producto
+    func deleteProduct(listID: String, productID: String) -> AnyPublisher<Void, Error>
+
+    /// Actualiza los campos `orden` de varios productos (re‑ordenación masiva)
+    func updateProductOrdenes(listID: String, products: [ProductModel]) -> AnyPublisher<Void, Error>
 }
 
 final class ProductUseCase: ProductUseCaseProtocol {
@@ -16,25 +26,25 @@ final class ProductUseCase: ProductUseCaseProtocol {
         self.repository = repository
     }
     
-    func getProducts(userID: String, listID: String) -> AnyPublisher<[ProductModel], Error> {
-        repository.getProducts(userID: userID, listID: listID)
+    func productsStream(listID: String) -> AnyPublisher<[ProductModel], Error> {
+        repository.productsPublisher(listID: listID)
     }
     
-    func addProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error> {
-        repository.addProduct(userID: userID, listID: listID, product: product)
+    func addProduct(listID: String, product: ProductModel) -> AnyPublisher<Void, Error> {
+        repository.addProduct(listID: listID, product: product)
     }
     
-    func updateProduct(userID: String, listID: String, product: ProductModel) -> AnyPublisher<Void, Error> {
-        repository.updateProduct(userID: userID, listID: listID, product: product)
+    func updateProduct(listID: String, product: ProductModel) -> AnyPublisher<Void, Error> {
+        repository.updateProduct(listID: listID, product: product)
     }
     
-    func deleteProduct(userID: String, listID: String, productID: String) -> AnyPublisher<Void, Error> {
-        repository.deleteProduct(userID: userID, listID: listID, productID: productID)
+    func deleteProduct(listID: String, productID: String) -> AnyPublisher<Void, Error> {
+        repository.deleteProduct(listID: listID, productID: productID)
     }
     
-    func updateProductOrdenes(userID: String, listID: String, products: [ProductModel]) -> AnyPublisher<Void, Error> {
+    func updateProductOrdenes(listID: String, products: [ProductModel]) -> AnyPublisher<Void, Error> {
         let updates = products.map {
-            repository.updateProduct(userID: userID, listID: listID, product: $0)
+            repository.updateProduct(listID: listID, product: $0)
         }
 
         return Publishers.MergeMany(updates)

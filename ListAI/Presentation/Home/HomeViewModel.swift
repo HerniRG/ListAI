@@ -1,23 +1,29 @@
 import Foundation
 import Combine
-import FirebaseFirestore
 
+
+@MainActor
 final class HomeViewModel: ObservableObject {
-    private var listListener: ListenerRegistration?
-    private var productsListener: ListenerRegistration?
+    private var listStreamCancellable: AnyCancellable?
+    private var productStreamCancellable: AnyCancellable?
     
     @Published var activeList: ShoppingListModel? {
         didSet {
-            // Detenemos el listener anterior para evitar actualizaciones de la lista saliente
-            stopListeningToProducts()
+            productStreamCancellable?.cancel()
+            products = []
 
-            guard
-                let listID = activeList?.id,
-                let userID = session.userID
-            else { return }
+            guard let listID = activeList?.id else { return }
 
-            loadProducts(userID: userID, listID: listID)
-            startListeningToProducts(listID: listID)
+            productStreamCancellable = productUseCase
+                .productsStream(listID: listID)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] completion in
+                    if case let .failure(error) = completion {
+                        self?.errorMessage = error.localizedDescription
+                    }
+                } receiveValue: { [weak self] products in
+                    self?.products = products
+                }
         }
     }
     @Published var lists: [ShoppingListModel] = [] {
@@ -52,6 +58,9 @@ final class HomeViewModel: ObservableObject {
     private let session: SessionManager
     private let authUseCase: AuthUseCaseProtocol
     private var cancellables = Set<AnyCancellable>()
+    private var nextOrden: Int {
+        (products.compactMap(\.orden).max() ?? -1) + 1
+    }
     
     // MARK: - Duplicate detection
     /// Devuelve `true` si `name` ya existe en `products`.
@@ -66,15 +75,7 @@ final class HomeViewModel: ObservableObject {
     }
     
     // MARK: - Helpers
-    /// Devuelve el siguiente valor de `orden` para un nuevo producto.
-    /// Si la lista está vacía, será 0; en caso contrario, `max(orden) + 1`.
-    private func nextOrden() -> Int {
-        guard let maxOrden = products.map({ $0.orden ?? 0 }).max() else {
-            return 0
-        }
-        return maxOrden + 1
-    }
-
+    
     init(listUseCase: ListUseCaseProtocol,
          productUseCase: ProductUseCaseProtocol,
          iaUseCase: IAUseCaseProtocol,
@@ -85,21 +86,16 @@ final class HomeViewModel: ObservableObject {
         self.iaUseCase = iaUseCase
         self.session = session
         self.authUseCase = authUseCase
-        loadLists()
+        bindLists()
     }
     
 }
 
 // MARK: - List Management
 extension HomeViewModel {
-    func loadLists() {
-        guard let userID = session.userID else {
-            errorMessage = "Usuario no encontrado"
-            return
-        }
-        
+    private func bindLists() {
         isLoading = true
-        listUseCase.fetchLists(for: userID)
+        listStreamCancellable = listUseCase.listsStream()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 self?.isLoading = false
@@ -109,22 +105,20 @@ extension HomeViewModel {
             } receiveValue: { [weak self] lists in
                 self?.lists = lists
                 self?.selectedPageIndex = 0
-                self?.activeList = lists.first      // didSet se encargará de cargar los productos
+                self?.activeList = lists.first
+                self?.isLoading = false             // ← deja de mostrar el spinner
             }
-            .store(in: &cancellables)
     }
     
     func createInitialList() {
-        guard let userID = session.userID,
-              !newListName.trimmingCharacters(in: .whitespaces).isEmpty else {
+        guard !newListName.trimmingCharacters(in: .whitespaces).isEmpty else {
             return
         }
-        
+
         isLoading = true
         errorMessage = nil
-        
+
         listUseCase.createList(
-            for: userID,
             name: newListName.trimmingCharacters(in: .whitespaces),
             context: selectedContextForNewList
         )
@@ -142,13 +136,11 @@ extension HomeViewModel {
     }
 
     func addNewList(nombre: String) {
-        guard let userID = session.userID,
-              !nombre.trimmingCharacters(in: .whitespaces).isEmpty else {
+        guard !nombre.trimmingCharacters(in: .whitespaces).isEmpty else {
             return
         }
-        
+
         listUseCase.createList(
-            for: userID,
             name: nombre.trimmingCharacters(in: .whitespaces),
             context: selectedContextForNewList
         )
@@ -158,7 +150,7 @@ extension HomeViewModel {
                 self?.errorMessage = error.localizedDescription
             }
         } receiveValue: { [weak self] newList in
-            self?.activeList = newList           // el listener añadirá la lista al array
+            self?.activeList = newList
         }
         .store(in: &cancellables)
     }
@@ -166,9 +158,7 @@ extension HomeViewModel {
     /// Elimina o abandona una lista concreta según el número de usuarios que la comparten.
     /// - Parameter listID: Identificador de la lista a eliminar/salir.
     func deleteList(listID: String) {
-        guard let userID = session.userID else { return }
-
-        listUseCase.deleteList(for: userID, listID: listID)
+        listUseCase.deleteList(listID: listID)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case let .failure(error) = completion {
@@ -182,7 +172,7 @@ extension HomeViewModel {
 
                 // Si era la lista activa, detenemos el listener y limpiamos productos
                 if self.activeList?.id == listID {
-                    self.stopListeningToProducts()
+                    self.productStreamCancellable?.cancel()
                     self.products = []
                     self.activeList = self.lists.first
                 }
@@ -195,27 +185,12 @@ extension HomeViewModel {
 
 // MARK: - Product Management
 extension HomeViewModel {
-    private func loadProducts(userID: String, listID: String) {
-        productUseCase.getProducts(userID: userID, listID: listID)
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] completion in
-                if case let .failure(error) = completion {
-                    self?.errorMessage = error.localizedDescription
-                }
-            } receiveValue: { [weak self] products in
-                self?.products = products.sorted(by: { ($0.orden ?? 0) < ($1.orden ?? 0) })
-            }
-            .store(in: &cancellables)
-    }
-
     func addProductManually() {
-        guard let userID = session.userID,
-              let listID = activeList?.id,
+        guard let listID = activeList?.id,
               !newProductName.trimmingCharacters(in: .whitespaces).isEmpty else {
             return
         }
-
-        let nextOrden = nextOrden()
+        let nextOrden = nextOrden
 
         let newProduct = ProductModel(
             id: UUID().uuidString,
@@ -226,7 +201,7 @@ extension HomeViewModel {
             ingredientesDe: nil
         )
 
-        productUseCase.addProduct(userID: userID, listID: listID, product: newProduct)
+        productUseCase.addProduct(listID: listID, product: newProduct)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case let .failure(error) = completion {
@@ -239,8 +214,7 @@ extension HomeViewModel {
     }
 
     func addProduct(named name: String) {
-        guard let userID = session.userID,
-              let listID = activeList?.id,
+        guard let listID = activeList?.id,
               !name.trimmingCharacters(in: .whitespaces).isEmpty else {
             return
         }
@@ -250,7 +224,7 @@ extension HomeViewModel {
             return
         }
 
-        let nextOrden = nextOrden()
+        let nextOrden = nextOrden
 
         let newProduct = ProductModel(
             id: UUID().uuidString,
@@ -261,7 +235,7 @@ extension HomeViewModel {
             ingredientesDe: nil
         )
 
-        productUseCase.addProduct(userID: userID, listID: listID, product: newProduct)
+        productUseCase.addProduct(listID: listID, product: newProduct)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case let .failure(error) = completion {
@@ -273,8 +247,7 @@ extension HomeViewModel {
     }
 
     func toggleComprado(for product: ProductModel) {
-        guard let userID = session.userID,
-              let listID = activeList?.id,
+        guard let listID = activeList?.id,
               let index = products.firstIndex(where: { $0.id == product.id }) else {
             return
         }
@@ -283,7 +256,7 @@ extension HomeViewModel {
         let updatedProduct = products[index]
 
         // Actualiza el producto en la base de datos
-        productUseCase.updateProduct(userID: userID, listID: listID, product: updatedProduct)
+        productUseCase.updateProduct(listID: listID, product: updatedProduct)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case let .failure(error) = completion {
@@ -294,11 +267,10 @@ extension HomeViewModel {
     }
 
     func deleteProduct(_ product: ProductModel) {
-        guard let userID = session.userID,
-              let listID = activeList?.id,
+        guard let listID = activeList?.id,
               let productID = product.id else { return }
-        
-        productUseCase.deleteProduct(userID: userID, listID: listID, productID: productID)
+
+        productUseCase.deleteProduct(listID: listID, productID: productID)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case let .failure(error) = completion {
@@ -311,15 +283,14 @@ extension HomeViewModel {
     }
 
     func editProduct(_ product: ProductModel) {
-        guard let userID = session.userID,
-              let listID = activeList?.id else { return }
+        guard let listID = activeList?.id else { return }
 
         if isDuplicate(product.nombre, excludingID: product.id) {
             editDuplicateDetected = true
             return
         }
 
-        productUseCase.updateProduct(userID: userID, listID: listID, product: product)
+        productUseCase.updateProduct(listID: listID, product: product)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case let .failure(error) = completion {
@@ -336,21 +307,20 @@ extension HomeViewModel {
     func moveProducts(from source: IndexSet, to destination: Int) {
         products.move(fromOffsets: source, toOffset: destination)
 
-        guard let userID = session.userID, let listID = activeList?.id else { return }
+        guard let listID = activeList?.id else { return }
 
         for (index, _) in products.enumerated() {
             products[index].orden = index
         }
 
-        productUseCase.updateProductOrdenes(userID: userID, listID: listID, products: products)
+        productUseCase.updateProductOrdenes(listID: listID, products: products)
             .sink(receiveCompletion: { _ in }, receiveValue: { })
             .store(in: &cancellables)
     }
 
     func addIngredientManually(_ nombre: String, from plato: String) {
-        guard let userID = session.userID,
-              let listID = activeList?.id else { return }
-        
+        guard let listID = activeList?.id else { return }
+
         let product = ProductModel(
             id: UUID().uuidString,
             nombre: nombre,
@@ -358,8 +328,8 @@ extension HomeViewModel {
             añadidoPorIA: true,
             ingredientesDe: plato
         )
-        
-        productUseCase.addProduct(userID: userID, listID: listID, product: product)
+
+        productUseCase.addProduct(listID: listID, product: product)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
                 if case let .failure(error) = completion {
@@ -369,23 +339,23 @@ extension HomeViewModel {
             }
             .store(in: &cancellables)
     }
+
 }
 
 // MARK: - IA Features
 extension HomeViewModel {
     func useIAForProductName() {
-        guard let userID = session.userID,
-              let listID = activeList?.id,
+        guard let listID = activeList?.id,
               let context = activeList?.context,
               !newProductName.trimmingCharacters(in: .whitespaces).isEmpty else {
             return
         }
-        
+
         isUsingIA = true
         iaErrorMessage = nil
-        
+
         let dish = newProductName.trimmingCharacters(in: .whitespaces)
-        
+
         iaUseCase.getIngredients(for: dish, context: context, listName: activeList?.nombre ?? "")
             .receive(on: DispatchQueue.main)
             .sink { [weak self] completion in
@@ -396,7 +366,7 @@ extension HomeViewModel {
                 }
             } receiveValue: { [weak self] ingredients in
                 guard let self = self else { return }
-                let baseOrden = self.nextOrden()
+                let baseOrden = self.nextOrden
 
                 let filtered = ingredients.filter { !self.isDuplicate($0) }
                 self.ignoredDuplicateNames = ingredients.filter { self.isDuplicate($0) }
@@ -411,13 +381,13 @@ extension HomeViewModel {
                         ingredientesDe: dish
                     )
                 }
-                
+
                 newProducts.forEach { product in
-                    self.productUseCase.addProduct(userID: userID, listID: listID, product: product)
+                    self.productUseCase.addProduct(listID: listID, product: product)
                         .sink(receiveCompletion: { _ in }, receiveValue: { })
                         .store(in: &self.cancellables)
                 }
-                
+
                 self.newProductName = ""
             }
             .store(in: &cancellables)
@@ -513,77 +483,3 @@ extension HomeViewModel {
     }
 }
 
-// MARK: - Firestore Real-time Listeners
-extension HomeViewModel {
-    func startListeningToLists() {
-        guard let email = authUseCase.getCurrentUserEmail() else {
-            errorMessage = "Correo de usuario no disponible"
-            return
-        }
-
-        isLoading = true
-        listListener = Firestore.firestore()
-            .collection("lists")
-            .whereField("sharedWith", arrayContains: email)
-            .addSnapshotListener { [weak self] snapshot, error in
-                DispatchQueue.main.async {
-                    self?.isLoading = false
-                    if let error = error {
-                        self?.errorMessage = "Error al escuchar listas: \(error.localizedDescription)"
-                        return
-                    }
-                    let docs = snapshot?.documents ?? []
-                    let nuevasListas = docs.compactMap { try? $0.data(as: ShoppingListModel.self) }
-                    self?.lists = nuevasListas
-
-                    if self?.activeList == nil {
-                        self?.activeList = nuevasListas.first
-                    } else if let actual = self?.activeList, let primera = nuevasListas.first, actual.id != primera.id {
-                        self?.activeList = primera
-                    }
-                }
-            }
-    }
-
-    func stopListeningToLists() {
-        listListener?.remove()
-        listListener = nil
-    }
-
-    // MARK: - Productos en tiempo real
-    func startListeningToProducts(listID: String) {
-        // Limpia el listener anterior
-        productsListener?.remove()
-
-        productsListener = Firestore.firestore()
-            .collection("lists").document(listID)
-            .collection("products")
-            // ⬅️ Eliminamos .order(by: "orden")
-            .addSnapshotListener { [weak self] snapshot, error in
-                guard let self = self else { return }
-
-                if let error {
-                    DispatchQueue.main.async {
-                        self.errorMessage = "Error al escuchar productos: \(error.localizedDescription)"
-                    }
-                    return
-                }
-
-                let nuevos = snapshot?.documents.compactMap {
-                    try? $0.data(as: ProductModel.self)
-                } ?? []
-
-                // Ordenamos en memoria: los que no tienen «orden» van al final
-                let ordenados = nuevos.sorted { ($0.orden ?? Int.max) < ($1.orden ?? Int.max) }
-
-                DispatchQueue.main.async {
-                    self.products = ordenados
-                }
-            }
-    }
-
-    func stopListeningToProducts() {
-        productsListener?.remove()
-        productsListener = nil
-    }
-}

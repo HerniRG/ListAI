@@ -226,11 +226,11 @@ Sal
                      pending: [String],
                      done: [String]) -> AnyPublisher<AnalysisResult, Error> {
 
-        let pendientesTexto = pending.isEmpty
+        _ = pending.isEmpty
             ? "—"
             : pending.map { "- \($0)" }.joined(separator: "\n")
 
-        let compradosTexto = done.isEmpty
+        _ = done.isEmpty
             ? "—"
             : done.map { "- \($0)" }.joined(separator: "\n")
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import FirebaseFirestore
 
 struct HomeView: View {
     @EnvironmentObject var session: SessionManager
@@ -134,12 +135,6 @@ struct HomeView: View {
                 ShareListSheet(isPresented: $viewModel.isShowingShareSheet) { email, completion in
                     viewModel.shareActiveList(withEmail: email, completion: completion)
                 }
-            }
-            .onAppear {
-                viewModel.startListeningToLists()
-            }
-            .onDisappear {
-                viewModel.stopListeningToLists()
             }
             .navigationBarHidden(true)
         }
