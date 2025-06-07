@@ -17,6 +17,7 @@ struct HomeView: View {
     @State private var isFetchingIngredients = false
     @State private var selectedProductID: String? = nil
     @State private var fabRotation: Double = 0
+    @State private var hideFloatingButtons = false
 
     // Floating action buttons for HomeView
     private var floatingButtons: some View {
@@ -79,7 +80,8 @@ struct HomeView: View {
                                 selectedProductID: $selectedProductID,
                                 showDeleteProductAlert: $showDeleteProductAlert,
                                 showDeleteListAlert: $showDeleteListAlert,
-                                editedName: $editedName
+                                editedName: $editedName,
+                                hideFloatingButtons: $hideFloatingButtons
                             )
                             .transition(.opacity.combined(with: .scale(scale: 0.95)))
                         }
@@ -94,7 +96,10 @@ struct HomeView: View {
                         IAThinkingOverlay()
                             .transition(.asymmetric(insertion: .scale.combined(with: .opacity), removal: .opacity))
                     }
-                    floatingButtons
+                    if !hideFloatingButtons {
+                        floatingButtons
+                            .transition(.move(edge: .bottom).combined(with: .opacity))
+                    }
                 }
             }
             .sheet(isPresented: $showAddProductSheet) {
