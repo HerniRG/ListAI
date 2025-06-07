@@ -79,7 +79,7 @@ struct ProductListView: View {
                             .fill(Color(.systemGray5))
                             .frame(height: 8)
                         Capsule()
-                            .fill(Color.accentColor)
+                            .fill(progreso == 1 ? Color.green : Color.accentColor)
                             .frame(width: geometry.size.width * CGFloat(progreso), height: 8)
                             .animation(.easeInOut(duration: 0.35), value: progreso)
                     }
