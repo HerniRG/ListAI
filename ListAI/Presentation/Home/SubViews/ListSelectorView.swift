@@ -44,9 +44,14 @@ struct ListSelectorView: View {
                         .animation(.spring(response: 0.35, dampingFraction: 0.8), value: viewModel.selectedPageIndex)
                     }
                     Button(action: showNewListSheet) {
-                        Image(systemName: "plus.circle.fill")
-                            .font(.title2)
-                            .foregroundColor(.accentColor)
+                        Image(systemName: "plus")
+                            .font(.body)
+                            .foregroundColor(.white)
+                            .frame(width: 24, height: 24)
+                            .background(
+                                Circle()
+                                    .fill(Color.accentColor)
+                            )
                     }
                     Spacer().frame(width: 8)
                 }

@@ -17,31 +17,58 @@ struct HomeView: View {
     @State private var isFetchingIngredients = false
     @State private var selectedProductID: String? = nil
     @State private var fabRotation: Double = 0
+    @State private var isExpanded = false
 
     // Floating action buttons for HomeView
     private var floatingButtons: some View {
-        VStack {
+        VStack(alignment: .trailing, spacing: 16) {
             Spacer()
-            HStack {
-                // Botón IA: esquina inferior izquierda
-                FloatingIAButton {
+
+            if isExpanded {
+                Button(action: {
                     viewModel.analyzeActiveList()
+                }) {
+                    Label("Analizar IA", systemImage: "sparkles")
+                        .padding()
+                        .background(Color.blue.opacity(0.9))
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        .shadow(radius: 4)
                 }
-                .padding(.bottom, 24)
-                .padding(.leading, 16)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
 
-                Spacer()
-
-                // Botón Añadir: esquina inferior derecha
-                FloatingAddButton(
-                    fabRotation: $fabRotation,
-                    showAddProductSheet: $showAddProductSheet
-                )
-                .padding(.bottom, 24)
-                .padding(.trailing, 16)
+                Button(action: {
+                    showAddProductSheet = true
+                }) {
+                    Label("Añadir elemento", systemImage: "plus")
+                        .padding()
+                        .background(Color.green.opacity(0.9))
+                        .foregroundColor(.white)
+                        .clipShape(Capsule())
+                        .shadow(radius: 4)
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+
+            Button(action: {
+                withAnimation(.spring()) {
+                    isExpanded.toggle()
+                }
+            }) {
+                Image(systemName: "plus")
+                    .rotationEffect(.degrees(isExpanded ? 45 : 0))
+                    .animation(.easeInOut(duration: 0.25), value: isExpanded)
+                    .font(.title)
+                    .frame(width: 56, height: 56)
+                    .background(Color.accentColor)
+                    .foregroundColor(.white)
+                    .clipShape(Circle())
+                    .shadow(radius: 6)
+            }
+            .padding(.bottom, 24)
         }
-        .transition(.scale)
+        .padding(.trailing, 16)
+        .frame(maxWidth: .infinity, alignment: .trailing)
     }
 
     var body: some View {
