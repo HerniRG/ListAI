@@ -14,6 +14,7 @@ final class DIContainer {
     let listUseCase: ListUseCaseProtocol
     let productUseCase: ProductUseCaseProtocol
     let iaUseCase: IAUseCaseProtocol
+    let shoppingListUseCase: ShoppingListUseCaseProtocol
     // puedes añadir los demás más adelante
     
     init(
@@ -28,12 +29,17 @@ final class DIContainer {
         self.productRepository = productRepository
         self.iaRepository = iaRepository
         // self.historialRepository = historialRepository
-        
+
         // Casos de uso
         self.authUseCase = AuthUseCase(repository: authRepository)
         self.listUseCase = ListUseCase(repository: listRepository)
         self.productUseCase = ProductUseCase(repository: productRepository)
         self.iaUseCase = IAUseCase(repository: iaRepository)
+        self.shoppingListUseCase = ShoppingListUseCase(
+            listUseCase: self.listUseCase,
+            productUseCase: self.productUseCase,
+            iaUseCase: self.iaUseCase
+        )
     }
 }
 
