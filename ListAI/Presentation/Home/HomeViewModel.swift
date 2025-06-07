@@ -307,8 +307,8 @@ extension HomeViewModel {
 // MARK: - IA Features
 extension HomeViewModel {
     func useIAForProductName() {
-        guard let listID = activeList?.id,
-              let context = activeList?.context,
+        guard activeList?.id != nil,
+              activeList?.context != nil,
               !newProductName.trimmingCharacters(in: .whitespaces).isEmpty else {
             return
         }

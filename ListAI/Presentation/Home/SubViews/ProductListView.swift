@@ -7,10 +7,7 @@ struct ProductListView: View {
     @Binding var showDeleteProductAlert: Bool
     @Binding var showDeleteListAlert: Bool
     @Binding var editedName: String
-    @Binding var hideFloatingButtons: Bool
 
-    @State private var lastScrollOffset: CGFloat = 0
-    
     @State private var showDeleteSelectedAlert = false
 
     @EnvironmentObject var viewModel: HomeViewModel
@@ -124,13 +121,6 @@ struct ProductListView: View {
                         Spacer()
                     } else {
                         List {
-                            GeometryReader { proxy in
-                                Color.clear
-                                    .preference(key: ScrollOffsetPreferenceKey.self,
-                                                value: proxy.frame(in: .named("ProductListScroll")).minY)
-                            }
-                            .frame(height: 0)
-
                             ForEach(viewModel.products) { product in
                                 ProductRowView(
                                     product: product,
@@ -144,16 +134,6 @@ struct ProductListView: View {
                             }
                         }
                         .listStyle(.plain)
-                        .coordinateSpace(name: "ProductListScroll")
-                        .onPreferenceChange(ScrollOffsetPreferenceKey.self) { value in
-                            let delta = value - lastScrollOffset
-                            if delta < -5 {
-                                withAnimation { hideFloatingButtons = true }
-                            } else if delta > 5 {
-                                withAnimation { hideFloatingButtons = false }
-                            }
-                            lastScrollOffset = value
-                        }
                         .padding(.top, 8)
                         .padding(.bottom, 4)
                         .animation(.spring(response: 0.4, dampingFraction: 0.75), value: viewModel.products)

@@ -153,7 +153,7 @@ final class ShoppingListUseCase: ShoppingListUseCaseProtocol {
                                      pending: pending,
                                      done: done)
             .map { [weak self] result in
-                guard let self = self else { return result }
+                guard self != nil else { return result }
                 let allNames = Set(products.map { $0.nombre.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() })
                 var filtered = result
                 filtered.suggestions = result.suggestions.filter {
