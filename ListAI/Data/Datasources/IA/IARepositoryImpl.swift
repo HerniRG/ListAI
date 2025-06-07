@@ -154,25 +154,19 @@ Sal
             URLSession.shared.dataTaskPublisher(for: req)
                 .tryCatch { error -> AnyPublisher<(data: Data, response: URLResponse), URLError> in
                     // En caso de fallo de red, reintenta con el siguiente modelo si lo hay
-                    guard let next = remaining.first else { throw error }
+                    guard let next = remaining.first else { throw IAError.serviceUnavailable }
                     var newReq = req
                     newReq.httpBody = makeBody(model: next)
                     return URLSession.shared.dataTaskPublisher(for: newReq)
                         .eraseToAnyPublisher()
                 }
                 .tryMap { data, response -> [String] in
-                    if let http = response as? HTTPURLResponse, http.statusCode != 200 {
-                        // Si status distinto de 200 y hay modelos restantes, reintentar
-                        if let next = remaining.first {
-                            var newReq = req
-                            newReq.httpBody = makeBody(model: next)
-                            throw URLError(.badServerResponse)
-                        }
-                        throw URLError(.badServerResponse)
+                    guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
+                        throw IAError.serviceUnavailable
                     }
                     
                     let text = String(data: data, encoding: .utf8) ?? "<sin decodificar>"
-                    print("🧾 Respuesta cruda de OpenRouter:\n\(text)")
+                    debugPrint("🧾 Respuesta cruda de OpenRouter:\n\(text)")
                     
                     let result = try JSONDecoder().decode(OpenRouterResponse.self, from: data)
                     let rawText = result.choices.first?.message.content ?? ""
@@ -281,7 +275,7 @@ Piensa paso a paso, pero **no muestres tu razonamiento**; entrega solo la respue
         return URLSession.shared.dataTaskPublisher(for: request)
             .tryMap { data, response -> AnalysisResult in
                 guard let http = response as? HTTPURLResponse, http.statusCode == 200 else {
-                    throw URLError(.badServerResponse)
+                    throw IAError.serviceUnavailable
                 }
                 let raw = try JSONDecoder().decode(OpenRouterResponse.self, from: data)
                     .choices.first?.message.content ?? ""
@@ -325,4 +319,15 @@ private struct OpenRouterResponse: Decodable {
         let message: Message
     }
     let choices: [Choice]
+}
+
+enum IAError: LocalizedError {
+    case serviceUnavailable
+
+    var errorDescription: String? {
+        switch self {
+        case .serviceUnavailable:
+            return "La inteligencia artificial no está disponible en este momento. Inténtalo más tarde."
+        }
+    }
 }

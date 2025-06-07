@@ -36,7 +36,7 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
                 "email": email,
                 "createdAt": FieldValue.serverTimestamp()
             ], merge: true) { err in
-                if let err { print("⚠️ No se pudo crear user stub:", err) }
+                if let err { debugPrint("⚠️ No se pudo crear user stub:", err) }
             }
 
             docRef.updateData([

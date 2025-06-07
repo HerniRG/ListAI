@@ -36,9 +36,9 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
                 }
                 result?.user.sendEmailVerification(completion: { error in
                     if let error = error {
-                        print("⚠️ Error al enviar correo de verificación: \(error.localizedDescription)")
+                        debugPrint("⚠️ Error al enviar correo de verificación: \(error.localizedDescription)")
                     } else {
-                        print("📧 Correo de verificación enviado.")
+                        debugPrint("📧 Correo de verificación enviado.")
                     }
                 })
                 if let uid = result?.user.uid {
@@ -49,7 +49,7 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
                         "createdAt": FieldValue.serverTimestamp()
                     ]) { error in
                         if let error = error {
-                            print("⚠️ Error al crear el documento de usuario: \(error.localizedDescription)")
+                            debugPrint("⚠️ Error al crear el documento de usuario: \(error.localizedDescription)")
                         }
                     }
                 } else {
@@ -88,7 +88,7 @@ final class AuthRepositoryImpl: AuthRepositoryProtocol {
                     do {
                         try Auth.auth().signOut()
                     } catch {
-                        print("⚠️ Error al cerrar sesión tras eliminar cuenta: \(error.localizedDescription)")
+                        debugPrint("⚠️ Error al cerrar sesión tras eliminar cuenta: \(error.localizedDescription)")
                     }
                     promise(.success(()))
                 }

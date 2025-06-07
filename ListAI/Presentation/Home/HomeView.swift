@@ -26,6 +26,7 @@ struct HomeView: View {
 
             if isExpanded {
                 Button(action: {
+                    isExpanded = false
                     viewModel.analyzeActiveList()
                 }) {
                     Label("Analizar IA", systemImage: "sparkles")
@@ -38,6 +39,7 @@ struct HomeView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
 
                 Button(action: {
+                    isExpanded = false
                     showAddProductSheet = true
                 }) {
                     Label("Añadir elemento", systemImage: "plus")

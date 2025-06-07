@@ -33,7 +33,7 @@ final class SessionManager: ObservableObject {
             self.userID = nil
             self.isLoggedIn = false
         } catch {
-            print("❌ Error al cerrar sesión: \(error.localizedDescription)")
+            debugPrint("❌ Error al cerrar sesión: \(error.localizedDescription)")
         }
     }
 }
