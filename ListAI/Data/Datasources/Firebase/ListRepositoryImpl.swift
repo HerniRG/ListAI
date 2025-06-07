@@ -31,40 +31,21 @@ final class ListRepositoryImpl: ListRepositoryProtocol {
         let docRef = db.document("lists/\(listID)")
         return Future { promise in
             let userDoc = self.db.collection("users").document(email)
-            userDoc.getDocument { doc, error in
+
+            userDoc.setData([
+                "email": email,
+                "createdAt": FieldValue.serverTimestamp()
+            ], merge: true) { err in
+                if let err { print("⚠️ No se pudo crear user stub:", err) }
+            }
+
+            docRef.updateData([
+                "sharedWith": FieldValue.arrayUnion([email])
+            ]) { error in
                 if let error = error {
                     return promise(.failure(error))
                 }
-
-                if doc == nil || !doc!.exists {
-                    userDoc.setData(["email": email,
-                                     "createdAt": FieldValue.serverTimestamp()]) { err in
-                        if let err { print("⚠️ No se pudo crear user stub:", err) }
-                    }
-                }
-
-                docRef.getDocument { snapshot, error in
-                    if let error = error {
-                        return promise(.failure(error))
-                    }
-
-                    guard let sharedWith = snapshot?.get("sharedWith") as? [String] else {
-                        return promise(.failure(NSError(domain: "", code: 404, userInfo: [NSLocalizedDescriptionKey: "No se pudo obtener la lista."])))
-                    }
-
-                    if sharedWith.contains(email) {
-                        return promise(.success(())) // Ya compartido, no hace falta actualizar
-                    }
-
-                    docRef.updateData([
-                        "sharedWith": FieldValue.arrayUnion([email])
-                    ]) { error in
-                        if let error = error {
-                            return promise(.failure(error))
-                        }
-                        promise(.success(()))
-                    }
-                }
+                promise(.success(()))
             }
         }
         .eraseToAnyPublisher()

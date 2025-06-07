@@ -27,27 +27,16 @@ final class ProductRepositoryImpl: ProductRepositoryProtocol {
             let docID = product.id ?? UUID().uuidString
             let docRef = self.db.collection(path).document(docID)
 
-            docRef.getDocument { snapshot, error in
-                if let error = error {
-                    return promise(.failure(error))
-                }
-
-                if let snapshot = snapshot, snapshot.exists {
-                    // Ya existe el producto → evitar sobrescribir
-                    return promise(.success(()))
-                } else {
-                    do {
-                        try docRef.setData(from: product) { error in
-                            if let error = error {
-                                promise(.failure(error))
-                            } else {
-                                promise(.success(()))
-                            }
-                        }
-                    } catch {
+            do {
+                try docRef.setData(from: product) { error in
+                    if let error = error {
                         promise(.failure(error))
+                    } else {
+                        promise(.success(()))
                     }
                 }
+            } catch {
+                promise(.failure(error))
             }
         }
         .eraseToAnyPublisher()
@@ -63,29 +52,16 @@ final class ProductRepositoryImpl: ProductRepositoryProtocol {
         let docRef = self.db.collection(path).document(id)
 
         return Future { promise in
-            docRef.getDocument { snapshot, error in
-                if let error = error {
-                    return promise(.failure(error))
-                }
-
-                if let snapshot = snapshot,
-                   let existingProduct = try? snapshot.data(as: ProductModel.self),
-                   existingProduct == product {
-                    // No hay cambios → evitar escritura
-                    return promise(.success(()))
-                }
-
-                do {
-                    try docRef.setData(from: product) { error in
-                        if let error = error {
-                            promise(.failure(error))
-                        } else {
-                            promise(.success(()))
-                        }
+            do {
+                try docRef.setData(from: product) { error in
+                    if let error = error {
+                        promise(.failure(error))
+                    } else {
+                        promise(.success(()))
                     }
-                } catch {
-                    promise(.failure(error))
                 }
+            } catch {
+                promise(.failure(error))
             }
         }
         .eraseToAnyPublisher()
