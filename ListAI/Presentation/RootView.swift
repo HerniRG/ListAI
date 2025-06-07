@@ -15,7 +15,7 @@ struct RootView: View {
                         .environmentObject(HomeViewModel(
                             listUseCase: di.listUseCase,
                             productUseCase: di.productUseCase,
-                            iaUseCase: di.iaUseCase,
+                            shoppingUseCase: di.shoppingListUseCase,
                             session: session,
                             authUseCase: di.authUseCase
                         ))
